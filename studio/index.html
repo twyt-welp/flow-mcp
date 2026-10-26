@@ -6,20 +6,48 @@
 <title>Flow Studio</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800;900&family=Hanken+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800;900&family=Hanken+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@500;700&family=Saira+Stencil+One&family=IBM+Plex+Sans:wght@400;500;700&family=IBM+Plex+Mono:wght@500;700&family=Bebas+Neue&family=Inter:wght@400;500;700&family=Chakra+Petch:wght@600;700&family=Space+Grotesk:wght@400;500;700&family=Space+Mono:wght@400;700&family=Fraunces:opsz,wght@9..144,700;9..144,900&family=DM+Sans:wght@400;500;700&family=DM+Mono:wght@500&display=swap" rel="stylesheet">
+<script>
+// Themes are sets of colour and font tokens laid over :root, applied before the page draws so it never flashes.
+const THEMES = {
+  clapper: { name: "Clapper", blurb: "Film-set black with a tally-light orange. The original.",
+    vars: { ink: "#14110e", ink2: "#1d1915", ink3: "#2a241e", line: "#3a322a", bone: "#f3eadb", dim: "#b3a793", tally: "#ff5a1f", go: "#9fe06a", warn: "#ffc53d", bad: "#ff4d4d", glowA: "rgba(255,90,31,.16)", glowB: "rgba(255,197,61,.06)", tallyGlow: "rgba(255,90,31,.35)",
+      display: '"Big Shoulders Display",Impact,sans-serif', body: '"Hanken Grotesk",system-ui,sans-serif', mono: '"JetBrains Mono",ui-monospace,monospace' } },
+  bunker: { name: "Bunker", blurb: "Army olive and stencil type, amber warning lights. Made for the apocalypse.",
+    vars: { ink: "#11130e", ink2: "#191c14", ink3: "#252a1d", line: "#3a412c", bone: "#e7e9d2", dim: "#a2a786", tally: "#e0a526", go: "#8fd16a", warn: "#f2d14c", bad: "#ff5c4d", glowA: "rgba(224,165,38,.13)", glowB: "rgba(143,209,106,.06)", tallyGlow: "rgba(224,165,38,.32)",
+      display: '"Saira Stencil One",Impact,sans-serif', body: '"IBM Plex Sans",system-ui,sans-serif', mono: '"IBM Plex Mono",ui-monospace,monospace' } },
+  frost: { name: "Frost", blurb: "Ice-blue night with clean condensed headings. Cold and calm.",
+    vars: { ink: "#0b1320", ink2: "#111c2b", ink3: "#1a283b", line: "#283b53", bone: "#e9f2fc", dim: "#8ea5be", tally: "#49c2ff", go: "#6ee7b7", warn: "#fcd34d", bad: "#ff6b81", glowA: "rgba(73,194,255,.15)", glowB: "rgba(110,231,183,.06)", tallyGlow: "rgba(73,194,255,.35)",
+      display: '"Bebas Neue",Impact,sans-serif', body: '"Inter",system-ui,sans-serif', mono: '"JetBrains Mono",ui-monospace,monospace' } },
+  neon: { name: "Neon", blurb: "Deep violet with magenta and mint. Loud, techy, late-night.",
+    vars: { ink: "#0d0a1a", ink2: "#161129", ink3: "#22193d", line: "#37295c", bone: "#f3edff", dim: "#a99dd0", tally: "#ff3df0", go: "#3dffb5", warn: "#ffd23d", bad: "#ff4d6d", glowA: "rgba(255,61,240,.16)", glowB: "rgba(61,255,181,.07)", tallyGlow: "rgba(255,61,240,.4)",
+      display: '"Chakra Petch",Impact,sans-serif', body: '"Space Grotesk",system-ui,sans-serif', mono: '"Space Mono",ui-monospace,monospace' } },
+  paper: { name: "Paper", blurb: "Light, warm and editorial, with serif headings. Easy on a bright screen.",
+    vars: { ink: "#f5f1ea", ink2: "#fffdf9", ink3: "#ebe4d8", line: "#d8cebd", bone: "#1f1b16", dim: "#6c6356", tally: "#e2552b", go: "#2f9e44", warn: "#b7791f", bad: "#d6336c", glowA: "rgba(226,85,43,.10)", glowB: "rgba(183,121,31,.06)", tallyGlow: "rgba(226,85,43,.28)",
+      display: '"Fraunces",Georgia,serif', body: '"DM Sans",system-ui,sans-serif', mono: '"DM Mono",ui-monospace,monospace' } },
+};
+function applyTheme(id) {
+  const t = THEMES[id] ?? THEMES.clapper, root = document.documentElement;
+  const css = { ink: "--ink", ink2: "--ink2", ink3: "--ink3", line: "--line", bone: "--bone", dim: "--dim", tally: "--tally", go: "--go", warn: "--warn", bad: "--bad", glowA: "--glow-a", glowB: "--glow-b", tallyGlow: "--tally-glow", display: "--display", body: "--body", mono: "--mono" };
+  for (const [k, v] of Object.entries(t.vars)) root.style.setProperty(css[k], v);
+  root.dataset.theme = THEMES[id] ? id : "clapper";
+  root.style.colorScheme = id === "paper" ? "light" : "dark";
+}
+try { applyTheme(localStorage.getItem("flow-studio-theme") || "clapper"); } catch { applyTheme("clapper"); }
+</script>
 <style>
 [hidden]{display:none!important}
 :root{
   --ink:#14110e; --ink2:#1d1915; --ink3:#2a241e; --line:#3a322a;
   --bone:#f3eadb; --dim:#b3a793; --tally:#ff5a1f; --go:#9fe06a; --warn:#ffc53d; --bad:#ff4d4d;
   --display:"Big Shoulders Display",Impact,sans-serif; --body:"Hanken Grotesk",system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,monospace;
-  --r:12px;
+  --r:12px; --glow-a:rgba(255,90,31,.16); --glow-b:rgba(255,197,61,.06); --tally-glow:rgba(255,90,31,.35);
 }
 *{box-sizing:border-box;margin:0}
 html{background:var(--ink);color:var(--bone);font:500 17px/1.4 var(--body);-webkit-text-size-adjust:100%}
 body{min-height:100vh;padding:0 16px 104px;background:
-  radial-gradient(1200px 500px at 85% -10%,rgba(255,90,31,.16),transparent 60%),
-  radial-gradient(900px 600px at -10% 30%,rgba(255,197,61,.06),transparent 60%),var(--ink)}
+  radial-gradient(1200px 500px at 85% -10%,var(--glow-a),transparent 60%),
+  radial-gradient(900px 600px at -10% 30%,var(--glow-b),transparent 60%),var(--ink)}
 body::before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.07;z-index:50;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E")}
 .wrap{max-width:1240px;margin:0 auto}
@@ -35,7 +63,8 @@ h1 span{color:var(--tally)}
 .tally.down{background:var(--bad)}
 @keyframes blink{50%{opacity:.25}}
 .hint{margin-top:12px;padding:12px 14px;border-left:5px solid var(--warn);background:var(--ink2);border-radius:var(--r);font-size:17px}
-.cols{display:grid;gap:22px;margin-top:16px}
+.cols{display:grid;grid-template-columns:minmax(0,1fr);gap:22px;margin-top:16px}
+.cols>*{min-width:0}
 @media(min-width:1040px){.cols{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);align-items:start}.side{position:sticky;top:18px;max-height:calc(100vh - 36px);overflow-y:auto;overscroll-behavior:contain;padding-right:4px}}
 h2{font:800 30px/1 var(--display);text-transform:uppercase;letter-spacing:.03em;margin:0 0 10px;display:flex;align-items:baseline;gap:10px}
 h2 small{font:700 14px var(--mono);color:var(--dim);letter-spacing:0}
@@ -70,7 +99,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--tally)}
 .slot{position:relative;min-height:92px;border:2px dashed var(--line);border-radius:10px;background:var(--ink);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;padding:8px;text-align:center;cursor:pointer;font:700 15px var(--mono);color:var(--dim);overflow:hidden}
 .slot:hover{border-color:var(--tally);color:var(--bone)}
 .slot img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.75}
-.slot .tag{position:relative;background:rgba(20,17,14,.85);padding:4px 10px;border-radius:8px;color:var(--bone);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.slot .tag{position:relative;background:rgba(20,17,14,.85);padding:4px 10px;border-radius:8px;color:#f3eadb;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .slot .two{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
 .slot .two button{min-height:38px;padding:0 10px;font:700 14px var(--mono);color:var(--bone);background:var(--ink3);border:2px solid var(--line);border-radius:10px;cursor:pointer}
 .slot .two button:hover{border-color:var(--tally)}
@@ -92,7 +121,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--tally)}
 .rollbar .in{max-width:1240px;margin:0 auto;display:flex;gap:12px;align-items:center}
 .est{flex:1;min-width:0;font:700 15px var(--mono);color:var(--dim)}
 .est b{display:block;font:900 28px/1 var(--display);color:var(--bone);letter-spacing:.03em}
-.roll{min-height:56px;padding:0 30px;font:900 30px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--ink);background:var(--tally);border:0;border-radius:12px;cursor:pointer;box-shadow:0 8px 30px rgba(255,90,31,.35)}
+.roll{min-height:56px;padding:0 30px;font:900 30px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--ink);background:var(--tally);border:0;border-radius:12px;cursor:pointer;box-shadow:0 8px 30px var(--tally-glow)}
 .roll:active{transform:translateY(2px)}
 .roll:disabled{background:var(--ink3);color:var(--dim);box-shadow:none;cursor:not-allowed}
 .job{display:grid;gap:8px;padding:12px 0;border-top:2px solid var(--line)}
@@ -214,7 +243,7 @@ details.ch p{margin-top:6px;color:var(--bone);font-size:16px;white-space:pre-wra
 .beat{background:var(--ink2);border:2px solid var(--line);border-radius:10px;overflow:hidden;display:flex;flex-direction:column}
 .beat .pic{position:relative;aspect-ratio:16/9;background:var(--ink);display:flex;align-items:center;justify-content:center;color:var(--dim);font:700 14px var(--mono);cursor:pointer}
 .beat .pic img,.beat .pic video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.beat .pic b{position:absolute;top:6px;left:6px;z-index:2;background:rgba(20,17,14,.85);color:var(--bone);font:800 15px var(--mono);padding:2px 8px;border-radius:7px}
+.beat .pic b{position:absolute;top:6px;left:6px;z-index:2;background:rgba(20,17,14,.85);color:#f3eadb;font:800 15px var(--mono);padding:2px 8px;border-radius:7px}
 .beat .meta{padding:8px;font-size:14px;color:var(--dim);flex:1}
 .beat .meta q{display:block;color:var(--bone);font-size:15px;quotes:none;margin-bottom:4px}
 .beat .bar{display:flex;gap:6px;padding:0 8px 8px}
@@ -238,13 +267,79 @@ details.ch p{margin-top:6px;color:var(--bone);font-size:16px;white-space:pre-wra
 .copyrow div{flex:1;min-width:0;white-space:pre-wrap}
 table.timing{width:100%;border-collapse:collapse;margin-top:10px;font:600 14px var(--mono)}
 table.timing td{padding:4px 6px;border-top:1px solid var(--line)}
+/* ---- dashboard ---- */
+.dhead{display:flex;flex-wrap:wrap;gap:12px 18px;align-items:flex-end;justify-content:space-between;margin-bottom:14px}
+.dhead h2{margin:0;font-size:clamp(28px,4.4vw,40px);line-height:1}
+.dhead .sub{font:700 13px var(--mono);color:var(--dim);margin-top:6px;letter-spacing:.04em}
+.nextup{display:flex;gap:14px;align-items:center;padding:14px 16px;border-radius:var(--r);border:2px solid var(--tally);background:linear-gradient(100deg,var(--glow-a),transparent 70%),var(--ink2);cursor:pointer;margin-bottom:14px;width:100%;text-align:left;color:var(--bone);font:inherit}
+.nextup:hover{box-shadow:0 6px 26px var(--tally-glow)}
+.nextup .k{font:700 12px var(--mono);color:var(--tally);letter-spacing:.14em;text-transform:uppercase}
+.nextup .t{font:800 23px/1.1 var(--display);letter-spacing:.03em;text-transform:uppercase}
+.nextup .d{color:var(--dim);font-size:15px}
+.nextup .go{margin-left:auto;flex:none;width:46px;height:46px;border-radius:50%;display:grid;place-items:center;background:var(--tally);color:var(--ink);font:900 24px var(--body)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px}
+.kpi{background:var(--ink2);border:2px solid var(--line);border-radius:var(--r);padding:12px 14px;animation:rise .45s both}
+.kpi b{display:block;font:900 34px/1 var(--display);letter-spacing:.02em}
+.kpi span{font:700 12px var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.08em}
+.kpi .meter{margin-top:8px;height:6px}
+.kpi.good b{color:var(--go)}
+.pipe{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:10px;margin-bottom:18px}
+.stage{position:relative;display:flex;flex-direction:column;gap:6px;text-align:left;padding:12px 14px 14px;border-radius:var(--r);border:2px solid var(--line);background:var(--ink2);color:var(--bone);font:inherit;cursor:pointer;transition:transform .15s,border-color .15s;animation:rise .45s both}
+.stage:hover{transform:translateY(-2px);border-color:var(--bone)}
+.stage .n{font:900 40px/1 var(--display);color:var(--ink3);-webkit-text-stroke:2px var(--line);position:absolute;top:8px;right:12px}
+.stage h3{font:800 21px/1 var(--display);letter-spacing:.05em;text-transform:uppercase;margin:0;padding-right:30px}
+.stage .d{font-size:14px;color:var(--dim);min-height:2.6em}
+.stage .chip{align-self:flex-start;font:700 11px var(--mono);text-transform:uppercase;letter-spacing:.1em;padding:3px 8px;border-radius:99px;border:2px solid var(--line);color:var(--dim)}
+.stage.done{border-color:color-mix(in srgb,var(--go) 55%,var(--line))}
+.stage.done .chip{border-color:var(--go);color:var(--go)}
+.stage.part .chip{border-color:var(--warn);color:var(--warn)}
+.stage.next{border-color:var(--tally);box-shadow:0 0 0 1px var(--tally),0 8px 26px var(--tally-glow)}
+.stage.next .chip{background:var(--tally);border-color:var(--tally);color:var(--ink)}
+.stage .meter{height:6px}
+.stage.done .meter i{background:var(--go)}
+.stage .cost{font:700 11px var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.08em}
+.board{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+.board .row h4{font:800 17px var(--display);letter-spacing:.06em;text-transform:uppercase;margin:0 0 6px;display:flex;gap:8px;align-items:baseline}
+.board .row h4 small{font:700 12px var(--mono);color:var(--dim);letter-spacing:0;text-transform:none}
+.frames{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin}
+.fr{position:relative;flex:0 0 auto;width:118px;aspect-ratio:16/9;border-radius:8px;overflow:hidden;background:var(--ink);border:2px solid var(--line);cursor:pointer;display:grid;place-items:center;color:var(--dim);font:700 12px var(--mono)}
+.fr:hover{border-color:var(--tally)}
+.fr img,.fr video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.fr.miss{border-style:dashed}
+.fr i{position:absolute;left:4px;top:4px;z-index:2;font:800 11px/1 var(--mono);font-style:normal;padding:3px 5px;border-radius:5px;background:rgba(20,17,14,.85);color:#f3eadb}
+.fr.hero{border-color:var(--warn)}
+.fr.clip::after{content:"▶";position:absolute;right:5px;bottom:3px;z-index:2;color:#fff;font-size:12px;text-shadow:0 1px 3px #000}
+.tl{display:flex;height:46px;border-radius:10px;overflow:hidden;border:2px solid var(--line);background:var(--ink)}
+.tl div{position:relative;min-width:0;padding:5px 7px;border-right:2px solid var(--ink);background:color-mix(in srgb,var(--tally) 22%,var(--ink2));overflow:hidden;cursor:default}
+.tl div:nth-child(even){background:color-mix(in srgb,var(--tally) 12%,var(--ink2))}
+.tl div.fb{background:color-mix(in srgb,#5b6b86 45%,var(--ink2))}
+.tl b{display:block;font:800 13px/1.1 var(--display);letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tl small{font:700 11px var(--mono);color:var(--dim)}
+.dgrid{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
+.dgrid>*,.board>*{min-width:0}
+/* The dashboard takes the width; the live Monitor narrows to a column beside it. */
+@media(min-width:1040px){.cols.dash{grid-template-columns:minmax(0,1fr) 330px}}
+@media(min-width:1040px){.cols.dash .pipe{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(min-width:760px){.dgrid.two{grid-template-columns:1fr 1fr}}
+/* ---- theme picker ---- */
+.themebtn{cursor:pointer;color:var(--bone);font:700 15px var(--mono)}
+.themebtn:hover{border-color:var(--tally)}
+.themes{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
+.theme{display:flex;flex-direction:column;gap:8px;padding:0;border-radius:12px;overflow:hidden;border:2px solid var(--line);background:var(--ink2);cursor:pointer;text-align:left;color:inherit;font:inherit}
+.theme.on{border-color:var(--tally);box-shadow:0 0 0 2px var(--tally)}
+.theme .pv{padding:12px;display:grid;gap:8px}
+.theme .pv .h{font-size:24px;line-height:1;text-transform:uppercase;letter-spacing:.03em}
+.theme .pv .sw{display:flex;gap:5px}
+.theme .pv .sw i{width:18px;height:18px;border-radius:50%;border:1px solid rgba(127,127,127,.35)}
+.theme .pv .bt{align-self:flex-start;padding:4px 12px;border-radius:7px;font-size:14px;text-transform:uppercase;letter-spacing:.06em}
+.theme p{padding:0 12px 12px;font-size:13px;color:var(--dim);margin:0}
 </style></head>
 <body>
 <div class="clapper"></div>
 <div class="wrap">
   <header>
     <h1>Flow <span>Studio</span></h1>
-    <div class="status" id="status"><span class="pill"><i class="tally"></i>Connecting…</span></div>
+    <div class="status"><span id="status" class="status"><span class="pill"><i class="tally"></i>Connecting…</span></span><button type="button" class="pill themebtn" id="themeOpen" title="Change the look">Theme</button></div>
   </header>
   <div id="offline"></div>
   <div id="hint"></div>
@@ -256,7 +351,8 @@ table.timing td{padding:4px 6px;border-top:1px solid var(--line)}
   </div>
 
   <nav class="tabs" id="tabs">
-    <button data-tab="p_topics" class="on">1 · Topics<small>ideas &amp; script</small></button>
+    <button data-tab="p_home" class="on">Dashboard<small>overview</small></button>
+    <button data-tab="p_topics">1 · Topics<small>ideas &amp; script</small></button>
     <button data-tab="p_cast">2 · Cast<small>sheets · free</small></button>
     <button data-tab="p_stills">3 · Stills<small>key frames · free</small></button>
     <button data-tab="p_clips">4 · Hero clips<small>credits</small></button>
@@ -279,7 +375,9 @@ table.timing td{padding:4px 6px;border-top:1px solid var(--line)}
   <div class="cols">
     <main>
       <!-- ===== C5 REBORN PIPELINE ===== -->
-      <section class="panel on" data-panel="p_topics">
+      <section class="panel on" data-panel="p_home"><div id="dash"></div></section>
+
+      <section class="panel" data-panel="p_topics">
         <div class="step">Step 1</div>
         <h2>Topics <small>ideas &amp; script</small></h2>
         <p class="lede">Claude runs the engine's writing: ten ideas, the script, the beat map and every prompt. Type your own topics here and Claude builds the ideas from them. Pick an idea here or tell Claude its number.</p>
@@ -613,6 +711,7 @@ table.timing td{padding:4px 6px;border-top:1px solid var(--line)}
   <button class="roll" id="roll">Roll</button>
 </div></div>
 
+<dialog id="themeDlg" style="width:min(940px,calc(100vw - 24px))"><div class="viewbar" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><h2 style="margin:0">Theme</h2><button type="button" class="btn small" onclick="themeDlg.close()">Done</button></div><div class="themes" id="themeList"></div></dialog>
 <dialog id="picker"><h2 style="font-size:34px">Pick from Flow</h2><p class="empty">Media already in the open Flow project.</p><div class="lib" id="pickList"></div><div style="margin-top:16px"><button class="btn small ghost" onclick="picker.close()">Close</button></div></dialog>
 <dialog id="viewer"><div class="viewbar"><button type="button" class="btn small ghost" id="viewerTrash" style="border-color:var(--bad);color:var(--bad)">Move to <span data-place="bin">the Mac's Trash</span></button><button type="button" class="btn small" onclick="viewer.close()" autofocus>Close</button></div><div id="viewerBody"></div><p class="empty" id="viewerPath"></p></dialog>
 <input type="file" id="file" hidden>
@@ -636,7 +735,7 @@ const guard = () => { if (!LIVE) { toast("Not connected — start Flow Studio fi
 const VIDEO_COST = { "Omni 1.1 Flash": { "360p": { 4: 4, 6: 5, 8: 6, 10: 7 }, "720p": { 4: 7, 6: 10, 8: 12, 10: 15 } }, "Veo 3.1 - Lite": 10, "Veo 3.1 - Fast": 20, "Veo 3.1 - Quality": 100 };
 const blank = () => ({ prompt: "", technique: "", chain: false, match: false, first: null, last: null, refs: [] });
 const DEFAULTS = {
-  tab: "p_topics",
+  tab: "p_home",
   c5: { video: "", clipLen: 6, mv: 30, sv: 50, av: 25 },
   frames: { project: "MyFilm", aspect: "16:9", variants: 1, engine: "exact", scenes: [blank()] },
   shots: { project: "MyFilm", model: "Omni 1.1 Flash", aspect: "16:9", duration: 8, resolution: "720p", variants: 1, quality: "original", max: 25, scenes: [blank()] },
@@ -646,6 +745,8 @@ const DEFAULTS = {
 };
 const S = Object.assign(structuredClone(DEFAULTS), JSON.parse(localStorage.getItem("flow-studio-v2") || "{}"));
 const save = () => localStorage.setItem("flow-studio-v2", JSON.stringify(S));
+// The dashboard is the front page now: open on it once, then remember wherever the user goes.
+if (!S.dashboard) { S.tab = "p_home"; S.dashboard = 1; save(); }
 let TECH = [], VOICES = { gemini: [], mac: [] }, CAST = [], LIB = [], GAL = [], castImage = null, pickTarget = null, busy = false;
 
 /* ---------- tabs ---------- */
@@ -653,6 +754,7 @@ function showTab(name) {
   S.tab = name; save();
   $$("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
   $$(".panel").forEach((p) => p.classList.toggle("on", p.dataset.panel === name));
+  $(".cols").classList.toggle("dash", name === "p_home");
   // Each tab shows the files it can use. Voice has its own narration list and Library its own Flow list, so the
   // gallery would only be in the way there.
   $("#galCard").hidden = !GALLERY_KINDS[name];
@@ -1327,6 +1429,7 @@ function renderStatus(st) {
   const text = !f.signedIn ? "Not signed in" : !f.inProject ? "No project open" : active ? "Working" : "Ready";
   if (f.credits_remaining !== undefined) renderStatus.credits = f.credits_remaining;
   if (f.plan) renderStatus.plan = f.plan;
+  if ($("#dk_credits") && renderStatus.credits !== undefined) $("#dk_credits").textContent = renderStatus.credits.toLocaleString();
   $("#status").innerHTML = `<span class="pill"><i class="tally ${cls}"></i>${text}</span>${renderStatus.plan ? `<span class="pill">${esc(renderStatus.plan)}</span>` : ""}${renderStatus.credits !== undefined ? `<span class="pill">${renderStatus.credits.toLocaleString()} credits</span>` : ""}`;
   $("#hint").innerHTML = f.hint ? `<div class="hint">${esc(f.hint)}</div>` : "";
   $("#pacing").innerHTML = st.pacing ? `<div class="pacing">⏱ ${esc(st.pacing)}</div>` : "";
@@ -1408,8 +1511,97 @@ function c5Render() {
     p_brand: p.branding?.titles?.length ? "done" : pr?.thumbnails.done.length ? "part" : "",
   };
   $("#v_strip").innerHTML = vid() ? STEPS.map(([k, label]) => `<span class="${st[k]}">${st[k] === "done" ? "✓ " : ""}${label}</span>`).join("") : "";
-  renderTopics(); renderSheets(); renderStills(); renderHero(); renderBrand(); renderSteps(); estimate();
+  renderTopics(); renderSheets(); renderStills(); renderHero(); renderBrand(); renderSteps(); renderHome(st); estimate();
 }
+
+/* dashboard: the whole video at a glance; every card opens its step */
+const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
+function stages(st) {
+  const p = P(), pr = PROD?.progress, f = PROD?.files ?? { stills: {}, clips: {}, thumbs: {}, sheets: {} };
+  const ch = p.script?.chapters ?? [], words = ch.reduce((n, c) => n + c.text.split(/\s+/).filter(Boolean).length, 0);
+  const beats = p.beats ?? [], heroes = beats.filter((b) => b.hero);
+  const frac = (a, b) => (b ? Math.round((100 * a) / b) : 0);
+  const stills = beats.length - (pr?.stills.missing.length ?? beats.length), clips = heroes.length - (pr?.clips.missing.length ?? heroes.length);
+  const thumbs = pr?.thumbnails.done.length ?? 0, nThumbs = (p.thumbnails ?? []).length;
+  return [
+    { k: "p_topics", n: 1, name: "Topics", cost: "free", pct: ch.length ? 100 : p.topics?.length ? 50 : 0,
+      d: ch.length ? `${words.toLocaleString()} words · ${ch.length} chapters` : p.topics?.length ? `${p.topics.length} ideas${p.picked ? `, #${p.picked} picked` : ""}` : "Waiting for ideas",
+      next: p.topics?.length ? "Ask Claude to write the script" : "Type your topics or ask Claude for ideas" },
+    { k: "p_cast", n: 2, name: "Cast", cost: "free", pct: frac(pr?.sheets.done.length ?? 0, pr?.sheets.total ?? 0),
+      d: pr?.sheets.total ? `${pr.sheets.done.length} of ${pr.sheets.total} sheets drawn` : "No sheets yet", next: "Draw the reference sheets" },
+    { k: "p_stills", n: 3, name: "Stills", cost: "free", pct: frac(stills, beats.length),
+      d: beats.length ? `${stills} of ${beats.length} key frames` : "No beat map yet", next: `Draw ${beats.length - stills} still${beats.length - stills === 1 ? "" : "s"}` },
+    { k: "p_clips", n: 4, name: "Hero clips", cost: "credits", pct: frac(clips, heroes.length),
+      d: heroes.length ? `${clips} of ${heroes.length} ★ clips` : "No hero beats yet", next: `Animate ${heroes.length - clips} hero clip${heroes.length - clips === 1 ? "" : "s"}` },
+    { k: "p_voice", n: 5, name: "Voice", cost: "free", pct: pr?.voice ? 100 : 0,
+      d: pr?.voice ? `${mmss(pr.voice.total)} · ${pr.voice.voice ?? "Google voice"}` : ch.length ? `About ${Math.max(1, Math.round(words / 150))} min to record` : "Needs the script", next: "Record the voiceover" },
+    { k: "p_capcut", n: 6, name: "CapCut", cost: "free", pct: p.settings?.capcut_project ? 100 : 0,
+      d: p.settings?.capcut_project ? `Built into "${p.settings.capcut_project}"` : "Timeline not built", next: "Build the CapCut timeline" },
+    { k: "p_brand", n: 7, name: "Branding", cost: "free", pct: Math.round((frac(thumbs, nThumbs) + (p.branding?.titles?.length ? 100 : 0)) / 2),
+      d: `${thumbs}/${nThumbs || 5} thumbnails${p.branding?.titles?.length ? " · titles ready" : ""}`, next: "Draw thumbnails and titles" },
+  ].map((x) => ({ ...x, status: st[x.k] || (x.pct ? "part" : "") }));
+}
+function renderHome(st = {}) {
+  const host = $("#dash"); if (!host) return;
+  const p = P(), pr = PROD?.progress, f = PROD?.files ?? { stills: {}, clips: {} };
+  if (!vid()) {
+    host.innerHTML = `<div class="dhead"><div><h2>No video yet</h2><div class="sub">Press + New video, or ask Claude for a new C5 video.</div></div></div>${themeCard()}`;
+    return;
+  }
+  const list = stages(st), nxt = list.find((x) => x.status !== "done");
+  const beats = p.beats ?? [], heroes = beats.filter((b) => b.hero);
+  const stillsDone = beats.filter((b) => f.stills[b.n]).length, clipsDone = heroes.filter((b) => f.clips[b.n]).length;
+  const overall = Math.round(list.reduce((n, x) => n + (x.status === "done" ? 100 : x.pct), 0) / list.length);
+  const words = (p.script?.chapters ?? []).reduce((n, c) => n + c.text.split(/\s+/).filter(Boolean).length, 0);
+  const kpi = (val, label, pct, good) => `<div class="kpi${good ? " good" : ""}"><b>${val}</b><span>${label}</span>${pct !== undefined ? `<div class="meter"><i style="width:${pct}%"></i></div>` : ""}</div>`;
+  const chapters = chaptersOf(beats);
+  host.innerHTML = `
+    <div class="dhead"><div><div class="step">${esc(p.state ?? "in progress")} · ${overall}% done</div><h2>${esc(p.title ?? vid())}</h2><div class="sub">${esc(vid())}${PROD?.dir ? ` · ${esc(PROD.dir)}` : ""}</div></div></div>
+    ${nxt ? `<button type="button" class="nextup" data-go="${nxt.k}"><div><div class="k">Next · step ${nxt.n}</div><div class="t">${esc(nxt.next)}</div><div class="d">${esc(nxt.d)}</div></div><span class="go">→</span></button>` : `<button type="button" class="nextup" data-go="p_brand"><div><div class="k">All steps done</div><div class="t">Export in CapCut and publish</div><div class="d">Titles and description are on the Branding tab.</div></div><span class="go">✓</span></button>`}
+    <div class="kpis">
+      ${kpi(beats.length ? `${stillsDone}/${beats.length}` : "–", "stills drawn", beats.length ? (100 * stillsDone) / beats.length : undefined, beats.length && stillsDone === beats.length)}
+      ${kpi(heroes.length ? `${clipsDone}/${heroes.length}` : "–", "hero clips", heroes.length ? (100 * clipsDone) / heroes.length : undefined, heroes.length && clipsDone === heroes.length)}
+      ${kpi(pr?.voice ? mmss(pr.voice.total) : words ? `~${Math.max(1, Math.round(words / 150))}m` : "–", pr?.voice ? "runtime" : "est. runtime")}
+      ${kpi(`<span id="dk_credits">${renderStatus.credits !== undefined ? renderStatus.credits.toLocaleString() : "–"}</span>`, "Flow credits left")}
+    </div>
+    <h2>Pipeline <small>tap a step to open it</small></h2>
+    <div class="pipe">${list.map((x, i) => `<button type="button" class="stage ${x.status}${x === nxt ? " next" : ""}" data-go="${x.k}" style="animation-delay:${i * 40}ms"><span class="n">${x.n}</span><h3>${x.name}</h3><span class="chip">${x.status === "done" ? "✓ done" : x === nxt ? "up next" : x.status === "part" ? "in progress" : "to do"}</span><div class="d">${esc(x.d)}</div><div class="meter"><i style="width:${x.status === "done" ? 100 : x.pct}%"></i></div><span class="cost">${x.cost}</span></button>`).join("")}</div>
+    <div class="dgrid">
+      ${chapters.length ? `<section><h2>Storyboard <small>${stillsDone} of ${beats.length} frames · ★ = hero clip</small></h2><div class="card board">${chapters.map((c) => `<div class="row"><h4>${esc(c.marker)}<small>${c.beats.filter((b) => f.stills[b.n]).length}/${c.beats.length}</small></h4><div class="frames">${c.beats.map((b) => {
+        const file = f.clips[b.n] ?? f.stills[b.n];
+        return `<div class="fr${file ? "" : " miss"}${b.hero ? " hero" : ""}${f.clips[b.n] ? " clip" : ""}" title="${esc(`${b.n}. ${b.text}`)}" ${file ? "" : `data-go="p_stills"`}><i>${b.n}${b.hero ? "★" : ""}</i>${file ? pic(file, `beat ${b.n}`) : "to draw"}</div>`;
+      }).join("")}</div></div>`).join("")}</div></section>` : ""}
+      ${pr?.voice?.chapters?.length ? `<section><h2>Voice timeline <small>${mmss(pr.voice.total)} · ${esc(pr.voice.voice ?? "")}</small></h2><div class="tl">${pr.voice.chapters.map((c) => {
+        const flash = (p.script?.chapters ?? []).find((x) => x.marker === c.marker)?.flashback;
+        return `<div class="${flash ? "fb" : ""}" style="flex:${Math.max(0.5, c.end - c.start)}" title="${esc(`${c.marker} · ${mmss(c.start)}–${mmss(c.end)}`)}"><b>${esc(c.marker)}</b><small>${mmss(c.start)}</small></div>`;
+      }).join("")}</div></section>` : ""}
+      ${themeCard()}
+    </div>`;
+}
+function themeCard() {
+  return `<section><h2>Theme <small>pick a look for this panel</small></h2><div class="themes">${themeTiles()}</div></section>`;
+}
+function themeTiles() {
+  const cur = document.documentElement.dataset.theme;
+  return Object.entries(THEMES).map(([id, t]) => { const v = t.vars; return `<button type="button" class="theme${cur === id ? " on" : ""}" data-theme-pick="${id}" style="background:${v.ink2};border-color:${cur === id ? v.tally : v.line}">
+    <div class="pv" style="background:radial-gradient(160px 80px at 90% 0,${v.glowA},transparent),${v.ink};color:${v.bone}"><span class="h" style="font-family:${esc(v.display)};font-weight:800">${t.name}<span style="color:${v.tally}"> studio</span></span>
+    <span class="sw">${[v.ink2, v.tally, v.go, v.warn, v.bone].map((c) => `<i style="background:${c}"></i>`).join("")}</span>
+    <span class="bt" style="background:${v.tally};color:${v.ink};font-family:${esc(v.display)};font-weight:800">Roll</span></div>
+    <p style="color:${v.dim};font-family:${esc(v.body)}">${cur === id ? "✓ In use · " : ""}${esc(t.blurb)}</p></button>`; }).join("");
+}
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("[data-theme-pick]");
+  if (t) {
+    applyTheme(t.dataset.themePick);
+    try { localStorage.setItem("flow-studio-theme", t.dataset.themePick); } catch {}
+    $("#themeList").innerHTML = themeTiles();
+    if (S.tab === "p_home") c5Render();
+    return;
+  }
+  const g = e.target.closest("[data-go]");
+  if (g && !e.target.closest("[data-view]")) showTab(g.dataset.go);
+});
+$("#themeOpen").onclick = () => { $("#themeList").innerHTML = themeTiles(); themeDlg.showModal(); };
 
 /* topics + script */
 function renderTopics() {
@@ -1624,6 +1816,7 @@ function c5Estimate() {
   const btn = $("#roll"), pr = PROD?.progress, tab = S.tab;
   const set = (num, sub, label, on) => { $("#estNum").textContent = num; $("#estSub").textContent = sub; btn.textContent = label; btn.disabled = busy || !on; };
   if (!vid()) return set("No video", "start one with + New video, or ask Claude", "Roll", false);
+  if (tab === "p_home") { const nx = $(".stage.next"); return set(nx ? `Next: ${nx.querySelector("h3").textContent}` : "All done", nx ? nx.querySelector(".d").textContent : "export in CapCut", "Open", Boolean(nx)); }
   if (tab === "p_cast") { const left = pr ? pr.sheets.total - pr.sheets.done.length : 0; return set("Free", `${left} sheet(s) to draw`, "Draw", left > 0); }
   if (tab === "p_stills") { const ready = (P().beats ?? []).filter((b) => b.still_prompt && !PROD?.files.stills[b.n]).length; return set("Free", `${ready} still(s) ready to draw`, "Draw", ready > 0); }
   if (tab === "p_clips") { const n = heroTodo().length; return set(`≈ ${n * clipCost()} credits`, `${n} clip(s) ready`, "Roll", n > 0); }
@@ -1633,7 +1826,7 @@ function c5Estimate() {
   return set("Free", P().title ?? "ideas and script come from Claude", "Roll", false);
 }
 function c5Roll() {
-  ({ p_cast: () => $("#c5_sheets").click(), p_stills: () => $("#st_all").click(), p_clips: () => makeClips(undefined), p_brand: () => $("#br_thumbs").click(), p_voice: () => $("#vo_go").click(), p_capcut: () => $("#cc_go").click() })[S.tab]?.();
+  ({ p_home: () => { const nx = $(".stage.next"); if (nx) showTab(nx.dataset.go); }, p_cast: () => $("#c5_sheets").click(), p_stills: () => $("#st_all").click(), p_clips: () => makeClips(undefined), p_brand: () => $("#br_thumbs").click(), p_voice: () => $("#vo_go").click(), p_capcut: () => $("#cc_go").click() })[S.tab]?.();
 }
 
 /* ---------- boot ---------- */
