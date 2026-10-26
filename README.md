@@ -214,8 +214,12 @@ the project's timeline each time it runs. Tools: `flow_production`, `flow_produc
 `flow_capcut_build`, `flow_capcut_restore`. The earlier panels (Frames, Shots, Cut, Captions and the rest) are under
 **More tools**.
 
-To use the skill, add the `skills/c5-reborn` folder to Claude as a skill (zip it, or copy it into your skills folder),
-then say *"new C5 video"*.
+The work comes in two skills, so the writing can use a stronger model and the Flow typing a cheaper one. Add both
+folders to Claude as skills (zip each, or copy them into your skills folder):
+
+- `skills/c5-reborn` writes: say *"new C5 video"*. It saves every prompt and stops at "prompts ready".
+- `skills/c5-flow-run` sends: switch to a cheaper model and say *"run C5 in Flow"*. Flow Studio's buttons do the same
+  steps with no model at all.
 
 ---
 

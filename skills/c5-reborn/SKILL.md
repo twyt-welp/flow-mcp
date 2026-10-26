@@ -1,6 +1,6 @@
 ---
 name: c5-reborn
-description: Run the C5 Reborn Apocalypse Engine end to end through the flow MCP server, from topics to Flow stills, hero clips, a Google voiceover, a CapCut timeline written straight into the project files, thumbnails and branding. Use when the user says "new C5 video", "new reborn video", "run the C5 engine" or "next reborn video", and when they ask to edit, sync or build a CapCut project ("edit my CapCut project - [project name]", "sync the images and videos to the voice over", "build the timeline by writing the project files"), and when they ask to open or launch Flow Studio.
+description: Write a C5 Reborn Apocalypse Engine video for Google Flow - topics, script, character sheets, beat map, still and clip prompts, thumbnail prompts, and afterwards the titles and description - saved for the flow tools to run. Use when the user says "new C5 video", "new reborn video", "write the C5 prompts", "run the C5 engine", "next reborn video", "rewrite still N" or "C5 branding". Sending the saved prompts to Flow, the voiceover and the CapCut edit belong to the c5-flow-run skill.
 ---
 
 # C5 Reborn Apocalypse Engine → Google Flow → CapCut
@@ -14,6 +14,26 @@ Everything for one video is saved with `flow_production` (one record per video, 
 output there as you produce it: the other tools read their prompts from it, and Flow Studio
 (http://127.0.0.1:8787) shows it live, tab by tab, so the user can watch and redo things there too.
 
+## Two passes: writing here, Flow on a cheaper model
+
+The user splits the work to save usage: this skill runs on the strongest model and only WRITES; the `c5-flow-run`
+skill runs on a cheaper model (or the user presses Flow Studio's buttons, which uses no model at all) and SENDS the saved
+prompts to Flow. So, unless the user asks to do it all in one go:
+- Do STATES 1-5 and the writing parts of STATES 6 and 7, saving everything with `flow_production` exactly as below.
+  Never call `flow_c5_sheets`, `flow_c5_stills`, `flow_c5_clips`, `flow_c5_thumbnails`, `flow_narrate`,
+  `flow_voiceover` or `flow_capcut_build`, and skip `flow_status`. Where a state says to call one of them and wait,
+  skip that step and carry on.
+- Keep engine.md's HARD STOPs, but the user now reviews the written prompts, not pictures. STATE 5 still goes one
+  chapter per turn.
+- In STATE 6 save `clip_prompt`s and the per-clip cap (`settings.max_credits`), but do not ask to spend credits: the
+  spending yes is asked in the other pass.
+- When the thumbnail prompts are saved, set `state: "prompts_ready"` and end with:
+  "All prompts are saved. Switch to a cheaper model and say 'run C5 in Flow', or press the buttons in Flow Studio.
+  Come back here for any prompt that needs rewriting, and for 'C5 branding' once the voiceover is done."
+- Later visits: "rewrite still N" (or sheet, clip, thumbnail) -> read the record, rewrite that prompt as engine.md says
+  with the user's note, save it, and tell them to say "redo still N" in the cheaper pass. "C5 branding" -> STATE 8.
+- "Do it all in one go" or "draw as you go": ignore this section and run every state as written below.
+
 ## Opening Flow Studio
 
 When the user only asks to open or launch Flow Studio, call `flow_open_studio` and reply with the address. Never use
@@ -21,6 +41,8 @@ computer use for it. If the flow tools are missing, the connector is not running
 double-click `Flow Studio.cmd` in their flow-mcp folder.
 
 ## Before STATE 1
+
+(Steps 1 and 2 only in the all-in-one-go run.)
 
 1. Call `flow_status`. If not signed in or no project is open, stop and tell the user to run `npm run login` in their
    flow-mcp folder, sign in and open a Flow project.

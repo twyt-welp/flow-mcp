@@ -14,7 +14,8 @@ OmniFlow (lingoflow.pro/omniflow), using subscription credits instead of the API
   `src/audio.ts` WAV in/out + media lengths/sizes from file headers (the C5 path needs NO ffmpeg) ·
   `src/sound.ts` Claude's procedural sound library (sfx, ambience, music moods) written once to `_channel/sound/`;
   bump VERSION when a recipe changes ·  `src/capcut.ts` writes CapCut 9.6 draft JSON
-  (templates in `src/capcut-template.ts`, captured from a draft CapCut saved itself) · `skills/c5-reborn/` the skill
+  (templates in `src/capcut-template.ts`, captured from a draft CapCut saved itself) · `skills/c5-reborn/` the writing skill (strong model, never calls Flow) · `skills/c5-flow-run/` the sending skill
+  (cheaper model: sends saved prompts, voiceover, CapCut; never writes prompts) - the user's split, 2026-10-26
 - Test: `node scripts/e2e.mjs <project> '<scenes json>'` (spends credits unless scenes are images)
 
 ## Rules
