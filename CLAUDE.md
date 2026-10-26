@@ -520,3 +520,9 @@ The preview tool could not read the project while it lived in ~/Desktop; check t
 - CAPTIONS WORKFLOW (the user's rule, 2026-10-18): transcribe first, show the words with likely mishearings fixed,
   get the user's OK, THEN make the video once. The playbook and the flow_captions description say so too.
 
+- "@" OPENS FLOW'S ASSET PICKER (Tanya's first run, 2026-10-26): the C5 engine's lock handles ("MASCOT LOCK @YOU")
+  typed into the prompt box opened the asset picker at the "@", the rest of the prompt went into its search bar and
+  the job died waiting for Start generation. Every typed prompt now goes through forComposer() (drops "@" before a
+  name, else " at "). Same run: "Flow has no "x1" option" after the model menu picked Nano Banana 2.1 - choosing a
+  model can close the settings popover, so applySettings reopens it, and pickCount accepts the chip already showing
+  the count. Neither fix has been re-run live yet.

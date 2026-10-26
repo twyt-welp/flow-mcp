@@ -307,6 +307,17 @@ async function openSettings(page: Page): Promise<void> {
   if (!(await probe.isVisible().catch(() => false))) throw new Error("Could not open Flow's generation settings popover.");
 }
 
+// The composer's settings chip reads e.g. "Nano Banana 2.1 x1", so when the radios are missing but the chip already
+// shows the wanted count, nothing needs changing.
+async function pickCount(page: Page, n: number): Promise<void> {
+  const radio = page.getByRole("radio", { name: `x${n}`, exact: true }).first();
+  if (!(await radio.isVisible().catch(() => false))) {
+    const chip = await settingsTrigger(page).innerText().catch(() => "");
+    if (new RegExp(`\\bx${n}\\b`).test(chip)) return;
+  }
+  await pickRadio(page, `x${n}`);
+}
+
 async function pickRadio(page: Page, name: string | RegExp): Promise<void> {
   const radio = page.getByRole("radio", { name, exact: typeof name === "string" }).first();
   if (!(await radio.isVisible().catch(() => false))) {
@@ -367,10 +378,15 @@ async function applySettings(page: Page, job: Job): Promise<number> {
   if (s.type === "video") await pickRadio(page, framesMode ? "Frames" : "Ingredients");
   if (s.aspect_ratio) await pickRadio(page, s.aspect_ratio);
   const model = s.type === "image" && LEGACY_IMAGE_MODEL.test(s.model ?? "") ? LATEST_IMAGE_MODEL : s.model;
-  if (model) await pickModel(page, model);
+  if (model) {
+    await pickModel(page, model);
+    // Choosing from the model menu can close the settings popover, and then the x1-x4 radios are not on the page
+    // ("Flow has no "x1" option", Tanya's first run 2026-10-26). Reopen it; this does nothing when it is still open.
+    await openSettings(page);
+  }
   if (s.type === "video" && s.resolution) await pickRadio(page, new RegExp(`^${s.resolution}`));
   if (s.type === "video" && s.duration) await pickRadio(page, `${s.duration}s`);
-  await pickRadio(page, `x${s.variants ?? 1}`);
+  await pickCount(page, s.variants ?? 1);
   await pause(page, 600);
   const costText = await page.getByRole("link", { name: /credits?$/ }).innerText();
   const cost = Number(costText.match(/\d+/)?.[0] ?? NaN);
@@ -464,13 +480,20 @@ export async function attachAsset(page: Page, opener: Locator, assetName: string
   await pause(page, 500);
 }
 
+// Typing "@" in Flow's prompt box opens its asset picker, and every key after it goes into the picker's search box
+// instead (seen on Tanya's first run, 2026-10-26: "MASCOT LOCK @YOU" -> the rest of the prompt in the search bar and
+// a job stuck waiting for Start generation). The engine's lock handles (@YOU, @ROOMMATE) are only names, so drop the "@".
+export function forComposer(text: string): string {
+  return text.replace(/\s*\n+\s*/g, " ").replace(/@(?=[\p{L}\p{N}_])/gu, "").replace(/@/g, " at ").replace(/ {2,}/g, " ").trim();
+}
+
 async function typePrompt(page: Page, prompt: string): Promise<void> {
   const box = page.locator(".ProseMirror");
   await box.click();
   await page.keyboard.press("ControlOrMeta+a");
   await page.keyboard.press("Delete");
   // Enter submits in Flow, so the prompt goes in as a single line.
-  await page.keyboard.type(prompt.replace(/\s*\n+\s*/g, " ").trim(), { delay: 8 });
+  await page.keyboard.type(forComposer(prompt), { delay: 8 });
   await pause(page, 500);
 }
 
@@ -977,7 +1000,7 @@ export async function editCharacter(name: string, change?: string, job?: Job): P
     // The character editor always draws a wide 16:9 picture (1376x768), whatever shape the portrait was. Told only "make
     // his coat red", it filled the frame with three Pips side by side (2026-10-02), so every edit pins a single figure.
     const told = `${change.replace(/\s*\n+\s*/g, " ").trim().replace(/[.\s]*$/, ".")} Exactly one ${name} in the picture: never add copies of ${name} or extra poses side by side.`;
-    await page.keyboard.type(told, { delay: 8 });
+    await page.keyboard.type(forComposer(told), { delay: 8 });
     await pause(page, 600);
     const start = page.getByRole("button", { name: "Start generation" });
     if (!(await start.isEnabled())) throw new Error("Flow did not accept the change (Start generation stayed disabled).");
@@ -1271,7 +1294,7 @@ export async function runEdit(job: Job): Promise<string[]> {
   await box.click();
   await page.keyboard.press("ControlOrMeta+a");
   await page.keyboard.press("Delete");
-  const prompt = s.prompt.replace(/\s*\n+\s*/g, " ").trim();
+  const prompt = forComposer(s.prompt);
   await page.keyboard.type(prompt, { delay: 8 });
   await pause(page, 600);
   const start = page.getByRole("button", { name: "Start generation" });
@@ -1471,7 +1494,7 @@ async function agentRound(
     : `Generate exactly ${indexes.length} separate images, one image per scene, in scene order`;
   const ask = `${lead}. Images only, never video. ${aspect} aspect ratio. Do not ask questions, generate them now.${legend} ${script}`;
   await page.locator(".ProseMirror").first().click();
-  await page.keyboard.insertText(ask);
+  await page.keyboard.insertText(forComposer(ask));
   await pause(page, 800);
   const start = page.getByRole("button", { name: "Start generation" });
   if (!(await start.isEnabled())) throw new Error("Flow's agent did not accept the script (Start generation stayed disabled).");
