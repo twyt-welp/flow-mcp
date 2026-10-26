@@ -330,6 +330,13 @@ details.ch summary{font:600 15px var(--body)}
 .beat,.slot,.lib button,.gal figure,.cliprow{border-width:1px}
 .steps code,#viewerPath{font-family:var(--code);font-size:13px}
 .rollbar .in{max-width:1480px}
+/* On wide screens the action bar is a small floating card in the corner, not a band across the page. */
+@media(min-width:1040px){
+  .rollbar{left:auto;right:24px;bottom:20px;padding:10px 10px 10px 18px;border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.35);max-width:440px}
+  .rollbar .in{gap:16px}
+  .est{flex:0 1 auto}
+  body{padding-bottom:40px}
+}
 h1 span{margin-left:-.25em}
 /* steps: a sidebar on wide screens, a scrolling strip on phones */
 .tabs{border-bottom:1px solid var(--line);gap:4px}
