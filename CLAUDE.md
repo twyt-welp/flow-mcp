@@ -10,7 +10,10 @@ OmniFlow (lingoflow.pro/omniflow), using subscription credits instead of the API
 - `studio/index.html` Studio UI (single file, vanilla JS, mobile-first) · `src/chain.ts`, `src/assemble.ts` ffmpeg ·
   `src/techniques.ts` presets · `src/playbook.ts` guidance returned by `flow_status`
 - C5 Reborn pipeline: `src/production.ts` per-video record + file layout · `src/c5.ts` turns it into Flow jobs ·
-  `src/voiceover.ts` whole-script Gemini voiceover + beat timing · `src/capcut.ts` writes CapCut 9.6 draft JSON
+  `src/voiceover.ts` whole-script Gemini voiceover + beat timing (whisper words, else the voice's own pauses) ·
+  `src/audio.ts` WAV in/out + media lengths/sizes from file headers (the C5 path needs NO ffmpeg) ·
+  `src/sound.ts` Claude's procedural sound library (sfx, ambience, music moods) written once to `_channel/sound/`;
+  bump VERSION when a recipe changes ·  `src/capcut.ts` writes CapCut 9.6 draft JSON
   (templates in `src/capcut-template.ts`, captured from a draft CapCut saved itself) · `skills/c5-reborn/` the skill
 - Test: `node scripts/e2e.mjs <project> '<scenes json>'` (spends credits unless scenes are images)
 

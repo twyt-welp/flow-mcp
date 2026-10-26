@@ -5,14 +5,13 @@ import { basename, dirname, extname, join, relative } from "node:path";
 import { randomUUID } from "node:crypto";
 import { deflateSync } from "node:zlib";
 import { promisify } from "node:util";
+import { mediaInfo, type MediaInfo } from "./audio.js";
 import { T } from "./capcut-template.js";
 import { IS_MAC, IS_WIN } from "./platform.js";
-import { clipFile, pad, stillFile, type Beat, type Production } from "./production.js";
+import { clipFile, stillFile, type Beat, type Production } from "./production.js";
 import type { Timing } from "./voiceover.js";
 
 const run = promisify(execFile);
-const FFMPEG = process.env.FLOW_MCP_FFMPEG ?? "ffmpeg";
-const FFPROBE = process.env.FLOW_MCP_FFPROBE ?? "ffprobe";
 
 // CapCut keeps every project as a folder of plain JSON here. Version 9.6 on Windows still writes draft_content.json
 // unencrypted, which is what makes building a timeline from outside possible at all.
@@ -62,23 +61,12 @@ const tokens = (s: string) =>
     .filter((w) => w.length > 2 && !STOP.has(w));
 const STOP = new Set(["the", "and", "with", "for", "low", "soft", "slow", "light", "distant", "under", "over", "into", "from", "then", "big", "small", "sfx", "music", "ambient", "ambience", "track", "loop", "version", "muffled", "reverb", "heavy"]);
 
-interface Media {
-  width: number;
-  height: number;
-  duration: number; // seconds
-  audio: boolean;
-}
-
-const probed = new Map<string, Media>();
-async function probe(file: string): Promise<Media> {
+// Lengths and picture sizes come straight from the file headers (audio.ts), so the build needs nothing installed.
+const probed = new Map<string, MediaInfo>();
+async function probe(file: string): Promise<MediaInfo> {
   const hit = probed.get(file);
   if (hit) return hit;
-  const { stdout } = await run(FFPROBE, ["-v", "error", "-show_entries", "stream=codec_type,width,height:format=duration", "-of", "json", file]).catch(() => {
-    throw new Error(`Couldn't read "${basename(file)}" (ffprobe failed). Is FFmpeg installed, and is the file complete?`);
-  });
-  const d = JSON.parse(stdout) as { streams: { codec_type: string; width?: number; height?: number }[]; format?: { duration?: string } };
-  const v = d.streams.find((s) => s.codec_type === "video");
-  const m = { width: v?.width ?? 0, height: v?.height ?? 0, duration: Number(d.format?.duration ?? 0) || 0, audio: d.streams.some((s) => s.codec_type === "audio") };
+  const m = mediaInfo(file);
   probed.set(file, m);
   return m;
 }
@@ -116,23 +104,19 @@ function whitePng(file: string) {
   return file;
 }
 
-async function lastFrame(clip: string, target: string) {
-  mkdirSync(dirname(target), { recursive: true });
-  if (!existsSync(target)) await run(FFMPEG, ["-y", "-sseof", "-0.15", "-i", clip, "-update", "1", "-q:v", "2", target]);
-  return target;
-}
-
-/* ---------- the user's sound library ---------- */
+/* ---------- the sound library: the user's own files, then Claude's ---------- */
 
 interface Sound {
   file: string;
   kind: "music" | "sfx" | "ambience";
   words: string[];
+  own: boolean; // the user's file, preferred over Claude's when both fit a cue
 }
 
-const AUDIO = /\.(mp3|wav|m4a|aac|ogg|flac|aiff?)$/i;
+// The formats whose length can be read without FFmpeg.
+const AUDIO = /\.(mp3|wav|m4a)$/i;
 
-function library(root: string | undefined): Sound[] {
+function library(root: string | undefined, own: boolean): Sound[] {
   if (!root || !existsSync(root)) return [];
   const out: Sound[] = [];
   const walk = (dir: string, depth: number) => {
@@ -142,7 +126,7 @@ function library(root: string | undefined): Sound[] {
       else if (AUDIO.test(e.name)) {
         const rel = fwd(relative(root, p)).toLowerCase();
         const kind = /(^|\/)(music|songs?|bgm)\//.test(rel) ? "music" : /(^|\/)(ambien\w*|atmos\w*|room ?tones?|beds?)\//.test(rel) ? "ambience" : "sfx";
-        out.push({ file: p, kind, words: tokens(rel.replace(extname(rel), "")) });
+        out.push({ file: p, kind, words: tokens(rel.replace(extname(rel), "")), own });
       }
     }
   };
@@ -159,9 +143,12 @@ function pick(lib: Sound[], cue: string, kinds: Sound["kind"][]): Sound | undefi
     if (!kinds.includes(s.kind)) continue;
     let score = 0;
     for (const w of want) {
-      if (s.words.includes(w)) score += 1;
-      else if (s.words.some((x) => (x.length > 3 && w.startsWith(x)) || (w.length > 3 && x.startsWith(w)))) score += 0.6;
+      // The mood ("hopeful piano") matters more than the instrument: a sad piano is the wrong track for it.
+      const weight = MOODS.has(w) ? 1.5 : 1;
+      if (s.words.includes(w)) score += weight;
+      else if (s.words.some((x) => (x.length > 3 && w.startsWith(x)) || (w.length > 3 && x.startsWith(w)))) score += 0.6 * weight;
     }
+    if (score > 0 && s.own) score += 0.25;
     score -= s.words.length * 0.01;
     if (score > bestScore) {
       best = s;
@@ -170,6 +157,8 @@ function pick(lib: Sound[], cue: string, kinds: Sound["kind"][]): Sound | undefi
   }
   return bestScore >= 0.6 ? best : undefined;
 }
+
+const MOODS = new Set(["tense", "suspense", "dread", "dark", "ominous", "sad", "melancholy", "emotional", "grief", "somber", "hopeful", "uplifting", "warm", "inspiring", "action", "urgent", "intense", "chase", "eerie", "creepy", "horror", "unsettling", "mystery", "calm", "peaceful", "gentle", "reflective", "nostalgic", "dreamy", "epic", "triumphant", "victory", "heroic"]);
 
 const cueList = (s: string | undefined) =>
   (s ?? "")
@@ -193,6 +182,7 @@ export interface BuildOptions {
   production: Production;
   project: string;
   audio_dir?: string;
+  library_dir?: string; // Claude's generated sounds
   music_volume: number;
   sfx_volume: number;
   ambience_volume: number;
@@ -385,7 +375,7 @@ export async function buildCapcut(o: BuildOptions) {
 
   /* ---- 1. picture: one still (or hero clip) per beat, cut to the voice ---- */
   const beats = new Map((o.production.beats ?? []).map((b) => [b.n, b]));
-  const report = { stills: 0, clips: 0, held_frames: 0, missing_stills: [] as number[], music: [] as string[], ambience: [] as string[], sfx_placed: 0, sfx_skipped: [] as string[], titles: 0, ledger: 0, warnings: [] as string[] };
+  const report = { stills: 0, clips: 0, held_stills: 0, missing_stills: [] as number[], music: [] as string[], ambience: [] as string[], sfx_placed: 0, sfx_skipped: [] as string[], titles: 0, ledger: 0, warnings: [] as string[] };
   const main = track("Main");
   const order: Beat["move"][] = ["push_in", "pan_left", "pull_out", "pan_right"];
   let lastMove: Beat["move"] | undefined;
@@ -401,18 +391,19 @@ export async function buildCapcut(o: BuildOptions) {
     const clip = b?.hero ? clipFile(o.dir, bt.n) : undefined;
     if (clip) {
       const m = await visual(clip, "video");
-      const clipDur = us((await probe(clip)).duration);
-      const len = Math.min(clipDur, dur);
+      const len = Math.min(us((await probe(clip)).duration), dur);
+      const still = stillFile(o.dir, bt.n);
+      if (still && dur - len >= FRAME) {
+        // The beat outlasts its clip: its own still comes first, easing out to full frame, and the clip (whose first
+        // frame IS that still) takes over at the end of the beat, so the hand-over can't be seen.
+        const hold = dur - len;
+        videoSeg(main, await visual(still, "photo"), at, hold, [kf("KFTypeScaleX", [[0, 1.08], [hold, 1.0]])], 1.08);
+        report.held_stills++;
+        at += hold;
+      } else if (len < dur) report.warnings.push(`Beat ${bt.n}: its clip is shorter than the beat and its still is missing, so the picture goes black for ${((dur - len) / 1e6).toFixed(1)} s.`);
       videoSeg(main, m, at, len);
       report.clips++;
-      at += len;
-      dur -= len;
-      if (dur >= FRAME) {
-        // The beat outlasts its clip: hold the clip's own last frame with a gentle push, so the cut is invisible.
-        const frame = await lastFrame(clip, join(o.dir, "edit", `scene-${pad(bt.n)}-last.jpg`));
-        videoSeg(main, await visual(frame, "photo"), at, dur, [kf("KFTypeScaleX", [[0, 1.0], [dur, 1.04]])]);
-        report.held_frames++;
-      }
+      prevStill = still ?? prevStill;
       continue;
     }
     let still = stillFile(o.dir, bt.n);
@@ -443,8 +434,10 @@ export async function buildCapcut(o: BuildOptions) {
   }
 
   /* ---- 4. music, ambience and sound effects from the user's library ---- */
-  const lib = library(o.audio_dir);
-  if (!lib.length) report.warnings.push(`No sound files found in ${o.audio_dir ?? "(no sound folder set)"}: music and sound effects were skipped. Put music in a "music" folder and effects in an "sfx" folder there.`);
+  const lib = [...library(o.audio_dir, true), ...library(o.library_dir, false)];
+  if (!lib.length) report.warnings.push("No sound files were found, so music and sound effects were skipped.");
+  // Claude's files carry long synonym names for matching; the report calls them by their first word.
+  const label = (file: string) => (lib.find((x) => x.file === file)?.own === false ? `Claude's ${basename(file).split("_")[0]}` : basename(file));
   const soundOf = (marker: string) => (o.production.sound ?? []).find((s) => s.chapter === marker);
   const flashback = (marker: string) => /flashback/i.test(marker) || Boolean(o.production.script?.chapters.find((c) => c.marker === marker)?.flashback);
 
@@ -468,7 +461,7 @@ export async function buildCapcut(o: BuildOptions) {
       const to = us(Math.min(timing.total, g.end + (i < groups.length - 1 ? 0.75 : 0)));
       const vol = o.music_volume * (g.flash ? 0.7 : 1);
       loop(lane, m, from, to, vol, { in: i ? 1.0 : 0.4, out: i < groups.length - 1 ? 1.2 : 2.0 });
-      report.music.push(`${basename(g.file)} ${fmt(from)}-${fmt(to)}`);
+      report.music.push(`${label(g.file)} ${fmt(from)}-${fmt(to)}`);
     }
   }
 
@@ -481,7 +474,7 @@ export async function buildCapcut(o: BuildOptions) {
       continue;
     }
     loop(track("Ambience"), await sound(found.file), us(ch.start), us(ch.end), o.ambience_volume, { in: 0.8, out: 0.8 });
-    report.ambience.push(`${basename(found.file)} in ${ch.marker}`);
+    report.ambience.push(`${label(found.file)} in ${ch.marker}`);
   }
 
   // Each beat's own effects land just after it starts; a chapter's listed effects go to the beat whose words fit best.

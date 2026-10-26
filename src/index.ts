@@ -392,7 +392,7 @@ server.registerTool(
   "flow_voiceover",
   {
     title: "Record the whole voiceover and time every beat",
-    description: "Speak the saved script in a Google AI Studio voice (free; needs the key saved in Flow Studio's Voice tab) in a few long takes, join them into voice/narration.wav, and work out when every beat is spoken (word times from whisper.cpp when it is installed, otherwise an estimate). The CapCut build is cut to these times. Re-running only re-records takes whose text changed.",
+    description: "Speak the saved script in a Google AI Studio voice (free; needs the key saved in Flow Studio's Voice tab) in a few long takes, join them into voice/narration.wav, and work out when every beat is spoken (word times from whisper.cpp when it is installed, otherwise from the voice's own pauses). The CapCut build is cut to these times. Re-running only re-records takes whose text changed.",
     inputSchema: shapes.voiceover,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
   },
@@ -415,7 +415,7 @@ server.registerTool(
   {
     title: "Build the CapCut timeline",
     description:
-      "Write the whole edit into a CapCut project's files: stills and hero clips on the main track cut to the voiceover's beat times with slow push, pan and pull moves (and a held last frame when a beat outlasts its clip), the voiceover, a cut to white after the cold open, music per chapter from the user's music folder (crossfading between tracks), ambience and sound effects matched by name from their sfx folder, day markers and ledger numbers as text. CapCut must be CLOSED. The project's previous file is backed up first (flow_capcut_restore puts it back), and the build replaces the project's whole timeline. Returns what was placed and every cue that had no matching sound file.",
+      "Write the whole edit into a CapCut project's files: stills and hero clips on the main track cut to the voiceover's beat times with slow push, pan and pull moves (a hero beat longer than its clip holds its own still first, then hands over to the clip), the voiceover, a cut to white after the cold open, music per chapter (crossfading between tracks), ambience and sound effects matched by name to the SOUND cues. Sounds come from Claude's own library, synthesised in code and free (made on first use), and from the user's sound folder, whose files win when both fit. Never use computer use or open CapCut for an edit: this tool writes the project files. day markers and ledger numbers as text. CapCut must be CLOSED. The project's previous file is backed up first (flow_capcut_restore puts it back), and the build replaces the project's whole timeline. Returns what was placed and every cue that had no matching sound file.",
     inputSchema: shapes.capcut_build,
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
   },

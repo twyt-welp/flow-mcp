@@ -1,15 +1,10 @@
-import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { promisify } from "node:util";
+import { joinTakes, pauses, readWav, writeWav } from "./audio.js";
 import { speakLocally } from "./assemble.js";
 import { transcribe } from "./captions.js";
 import { speakWithGemini } from "./gemini.js";
 import { pad, type Production } from "./production.js";
-
-const run = promisify(execFile);
-const FFMPEG = process.env.FLOW_MCP_FFMPEG ?? "ffmpeg";
-const FFPROBE = process.env.FLOW_MCP_FFPROBE ?? "ffprobe";
 
 // About three minutes of speech per take: long enough that a whole video is four or five requests (the free AI Studio
 // tier allows only a handful of text-to-speech requests a minute and a day), short enough that a take never hits the
@@ -22,16 +17,49 @@ export interface Timing {
   voice: string;
   engine: string;
   total: number;
-  aligned: "words" | "estimate";
+  aligned: "words" | "pauses" | "estimate";
   chapters: { marker: string; start: number; end: number }[];
   beats: { n: number; chapter: string; start: number; end: number }[];
 }
 
 const wordsOf = (s: string) => s.split(/\s+/).filter(Boolean);
 
-export async function duration(file: string): Promise<number> {
-  const { stdout } = await run(FFPROBE, ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", file]);
-  return Number(stdout.trim());
+// How long a word takes to say, by its letters, plus a little for the breath a comma or full stop brings.
+const weight = (w: string) => w.replace(/[^\p{L}\p{N}]/gu, "").length + 2 + (/[.!?]["')\]]*$/.test(w) ? 4 : /[,;:\u2014-]$/.test(w) ? 2 : 0);
+
+// Without a transcriber, a word's time is found from the voice itself: the speaking time (pauses left out) is shared
+// out by each word's length, and a boundary that lands near a real pause moves onto it, so a cut falls in a breath and
+// never mid-word.
+function fromPauses(file: string, words: string[]): (k: number) => number {
+  const pcm = readWav(file);
+  const { speech, pauses: gaps } = pauses(pcm);
+  const len = pcm.channels[0].length / pcm.rate;
+  if (speech[1] <= speech[0]) return (k) => (len * k) / Math.max(1, words.length);
+  const inner = gaps.filter((g) => g.start > speech[0] && g.end < speech[1]);
+  const talk = speech[1] - speech[0] - inner.reduce((a, g) => a + g.end - g.start, 0);
+  const cum = [0];
+  for (const w of words) cum.push(cum.at(-1)! + weight(w));
+  // Speaking time -> clock time, stepping over each pause.
+  const clock = (t: number) => {
+    let at = speech[0];
+    for (const g of inner) {
+      if (at + t <= g.start) break;
+      t -= g.start - at;
+      at = g.end;
+    }
+    return at + t;
+  };
+  return (k) => {
+    if (k <= 0) return 0;
+    if (k >= words.length) return len;
+    const guess = clock((talk * cum[k]) / cum.at(-1)!);
+    let best: number | undefined, dist = 1.3;
+    for (const g of gaps) {
+      const mid = (g.start + g.end) / 2;
+      if (Math.abs(mid - guess) < dist) [best, dist] = [mid, Math.abs(mid - guess)];
+    }
+    return best ?? guess;
+  };
 }
 
 interface Take {
@@ -115,34 +143,37 @@ export async function recordVoiceover(
 
   onStep("joining the takes");
   const narration = join(out, "narration.wav");
-  const inputs = files.flatMap((f) => ["-i", f]);
-  const chain = files.map((_, i) => `[${i}:a]aresample=48000,aformat=channel_layouts=stereo,apad=pad_dur=${i < files.length - 1 ? GAP_S : 0}[a${i}]`).join(";");
-  await run(FFMPEG, ["-y", ...inputs, "-filter_complex", `${chain};${files.map((_, i) => `[a${i}]`).join("")}concat=n=${files.length}:v=0:a=1[out]`, "-map", "[out]", "-c:a", "pcm_s16le", narration]);
+  const joined = joinTakes(files.map((f) => readWav(f)), GAP_S);
+  writeWav(narration, joined);
+  const total = joined.channels[0].length / joined.rate;
 
-  // Where each take's words fall. whisper.cpp gives real word times; without it, words are spread evenly over the take.
+  // Where each take's words fall. whisper.cpp gives real word times when it is installed; otherwise they are read
+  // from the voice's own pauses.
   onStep("timing every beat against the voice");
   let aligned: Timing["aligned"] = "words";
   const at: ((wordIndex: number) => number)[] = [];
   let offset = 0;
   for (const [i, file] of files.entries()) {
-    const len = await duration(file);
-    const n = wordsOf(parts[i].text).length;
+    const take = readWav(file);
+    const len = take.channels[0].length / take.rate;
+    const words = wordsOf(parts[i].text);
+    const n = words.length;
     const base = offset;
     let heard: { start: number; end: number }[] = [];
     try {
       heard = (await transcribe(file, "en")).words;
     } catch {
-      aligned = "estimate";
+      heard = [];
     }
-    at.push(
-      heard.length > n / 2
-        ? (k) => (k <= 0 ? base : base + heard[Math.min(heard.length - 1, Math.max(0, Math.round((k * heard.length) / n) - 1))].end)
-        : (k) => base + (len * Math.min(k, n)) / n,
-    );
-    if (heard.length <= n / 2) aligned = "estimate";
+    if (heard.length > n / 2) {
+      at.push((k) => (k <= 0 ? base : base + heard[Math.min(heard.length - 1, Math.max(0, Math.round((k * heard.length) / n) - 1))].end));
+    } else {
+      const time = fromPauses(file, words);
+      at.push((k) => base + time(k));
+      aligned = "pauses";
+    }
     offset += len + (i < files.length - 1 ? GAP_S : 0);
   }
-  const total = await duration(narration);
 
   // A chapter's time runs from its first word to the next chapter's first word, so the picture never goes black.
   const spans: { marker: string; start: number }[] = [];

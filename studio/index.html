@@ -355,7 +355,7 @@ table.timing td{padding:4px 6px;border-top:1px solid var(--line)}
           <label class="f" for="cc_project">CapCut project</label>
           <div class="vrow"><select id="cc_project"></select><button type="button" class="btn small ghost" id="cc_reload">Refresh</button></div>
           <p class="empty" id="cc_open" style="margin-top:6px"></p>
-          <label class="f" for="cc_audio">Your sound folder <span class="soft">with music, sfx and ambience folders inside</span></label>
+          <label class="f" for="cc_audio">Your own sounds <span class="soft">optional: a folder with music, sfx and ambience inside. Claude makes the rest</span></label>
           <div class="vrow"><input type="text" id="cc_audio" spellcheck="false" placeholder="C:\Users\you\youtube-studio\audio"><button type="button" class="btn small" id="cc_audiosave">Save</button></div>
           <p class="empty" id="cc_audioInfo" style="margin-top:6px"></p>
           <div class="grid2">
@@ -1547,7 +1547,9 @@ async function ccLoad() {
   $("#cc_project").innerHTML = CC.projects.length ? CC.projects.map((p) => `<option value="${esc(p.name)}" ${p.name === want ? "selected" : ""}>${esc(p.name)}${p.backups ? ` · ${p.backups} backup(s)` : ""}</option>`).join("") : `<option value="">No CapCut projects found</option>`;
   $("#cc_open").innerHTML = CC.capcut_open ? `<span style="color:var(--bad)">CapCut is open. Close it before building.</span>` : `CapCut is closed. Projects live in <code>${esc(CC.root)}</code>`;
   if (document.activeElement !== $("#cc_audio")) $("#cc_audio").value = AUDIO.audio_dir ?? "";
-  $("#cc_audioInfo").textContent = AUDIO.audio_dir ? `${AUDIO.music} music, ${AUDIO.sfx} sound effects, ${AUDIO.ambience} ambience files.${!AUDIO.music && !AUDIO.sfx ? " Add files to the music and sfx folders to get sound in the edit." : ""}` : "No sound folder yet. Music and effects are skipped until there is one.";
+  const lib = AUDIO.claude_library;
+  const made = lib ? `Claude's library: ${lib.music} music moods, ${lib.sfx} sound effects and ${lib.ambience} ambience beds, made in code and free.` : "";
+  $("#cc_audioInfo").textContent = (AUDIO.audio_dir ? `Yours: ${AUDIO.music} music, ${AUDIO.sfx} sound effects, ${AUDIO.ambience} ambience files (used first when they fit). ` : "") + made;
   for (const [id, key] of [["cc_mv", "mv"], ["cc_sv", "sv"], ["cc_av", "av"]]) { $("#" + id).value = S.c5[key]; $(`#${id}Out`).textContent = `${S.c5[key]}%`; }
 }
 for (const [id, key] of [["cc_mv", "mv"], ["cc_sv", "sv"], ["cc_av", "av"]]) $("#" + id).addEventListener("input", (e) => { S.c5[key] = +e.target.value; $(`#${id}Out`).textContent = `${e.target.value}%`; save(); });
@@ -1561,7 +1563,7 @@ $("#cc_go").onclick = async () => {
   try {
     const r = await api("capcut_build", { video: vid(), project, music_volume: S.c5.mv / 100, sfx_volume: S.c5.sv / 100, ambience_volume: S.c5.av / 100, titles: $("#cc_titles").checked, ledger: $("#cc_ledger").checked });
     $("#cc_out").innerHTML = `<div class="report"><div><b>Built.</b> ${r.runtime} of picture against ${r.narration} of voice. Backup: <code>${esc(r.backup)}</code></div>
-      <div>${r.stills} stills, ${r.clips} hero clips${r.held_frames ? ` (${r.held_frames} with a held last frame)` : ""}, ${r.titles} day markers, ${r.ledger} ledger overlays, ${r.sfx_placed} sound effects.</div>
+      <div>${r.stills} stills, ${r.clips} hero clips${r.held_stills ? ` (${r.held_stills} opening on their still first)` : ""}, ${r.titles} day markers, ${r.ledger} ledger overlays, ${r.sfx_placed} sound effects.</div>
       ${r.music.length ? `<div>Music: ${r.music.map(esc).join(", ")}</div>` : ""}${r.ambience.length ? `<div>Ambience: ${r.ambience.map(esc).join(", ")}</div>` : ""}
       ${r.missing_stills.length ? `<div class="warn">No still yet for beat(s) ${r.missing_stills.join(", ")}: the beat before is held instead.</div>` : ""}
       ${r.sfx_skipped.length ? `<div class="warn">No matching sound file for: ${r.sfx_skipped.map(esc).join("; ")}</div>` : ""}${r.warnings.map((w) => `<div class="warn">${esc(w)}</div>`).join("")}

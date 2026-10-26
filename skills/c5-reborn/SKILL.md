@@ -1,6 +1,6 @@
 ---
 name: c5-reborn
-description: Run the C5 Reborn Apocalypse Engine end to end through the flow MCP server, from topics to Flow stills, hero clips, a Google voiceover, a CapCut timeline written straight into the project files, thumbnails and branding. Use when the user says "new C5 video", "new reborn video", "run the C5 engine" or "next reborn video".
+description: Run the C5 Reborn Apocalypse Engine end to end through the flow MCP server, from topics to Flow stills, hero clips, a Google voiceover, a CapCut timeline written straight into the project files, thumbnails and branding. Use when the user says "new C5 video", "new reborn video", "run the C5 engine" or "next reborn video", and when they ask to edit, sync or build a CapCut project ("edit my CapCut project - <name>", "sync the images and videos to the voice over", "build the timeline by writing the project files").
 ---
 
 # C5 Reborn Apocalypse Engine → Google Flow → CapCut
@@ -54,7 +54,12 @@ then save them onto the beats (merge by `n`):
 - `move`: the EDIT NOTE move as `push_in`, `pull_out`, `pan_left`, `pan_right` or `hold` (use `shake` for an impact
   beat: a door slam, a crash, the threat breaking through)
 - `overlay`: the EDIT NOTE overlay text exactly as it should read on screen ("$4,200 LEFT", "30 DAYS LEFT"), empty for none
-- `sfx`: the effects that land on this beat, in plain words ("door bang", "cans clinking")
+- `sfx`: the effects that land on this beat, in plain words ("door bang", "cans clinking"). The library has: whoosh,
+  impact/thud, door bang, knock, footsteps, running footsteps, heartbeat, creak, click/lock, metal/cans clink, coins,
+  glass shatter, thunder, riser, boom/braam, alarm beep, siren, phone buzz, clock tick, hammer, crowd murmur,
+  groan/zombie, gasp/breath, gunshot, drip, splash, chime/ding, pop, rustle, radio static. Ambience: wind, rain,
+  crickets/night, room tone, city hum, generator hum, fire crackle, dripping cave/bunker. Music moods: tense, sad,
+  hopeful, action, eerie, calm, flashback/nostalgic, epic. Name SOUND cues with these words.
 
 Save the chapter's SOUND line into `sound` (`chapter`, `music`, `sfx`, `ambient`). Then call `flow_c5_stills` with that
 chapter's beat numbers and `flow_wait` until finished. Show the paths, then the engine's closing line. If the user names
@@ -77,16 +82,33 @@ user pick. Then `flow_voiceover` with the chosen voice and a style note such as 
 story told at night". Report the runtime against the engine's target, then end with
 "Type 'next' to set up CapCut."
 
-**NEW STATE 6c — CapCut (free).** Tell the user, in this order, in a short numbered list:
+**NEW STATE 6c — CapCut (free).** If the user already asked for the edit in their own words (for example "I want you
+to edit my CapCut project - <name>. Sync the images, videos to the voice over. Also add sound effects, add music, and
+relevant text and motion effects ... do NOT use computer use or open CapCut. Build the timeline by writing the project
+files directly"), that request IS this state: skip the instructions below and go straight to the build with that
+project name. Never use computer use and never open CapCut: `flow_capcut_build` writes the project files itself.
+Which video: the one in progress, or the one whose title or folder matches the project name (`flow_productions`); ask
+only if two could fit. If the video has no voiceover yet, record it first (STATE 6b) and say so.
+
+Otherwise tell the user, in this order, in a short numbered list:
 1. Open CapCut and make a new project (name it after the video).
 2. Import the video's `stills` and `clips` folders and `voice/narration.wav` (the folder path is in `flow_production`'s
    `dir`). Importing is optional, but it puts the files in CapCut's media panel.
 3. Close CapCut completely.
 
-Ask "Tell me the CapCut project name when CapCut is closed." Then `flow_capcut_projects` to confirm the name and that
-CapCut is closed, and `flow_capcut_build`. Report what it placed (stills, clips, music, effects, titles, ledger), every
-cue with no matching sound file, and runtime against narration, in a few lines. Missing sounds: tell the user which
-file names to add to their `music` or `sfx` folder and offer to rebuild (it backs up and replaces the timeline each time).
+Ask "Tell me the CapCut project name when CapCut is closed." Then `flow_capcut_projects` to confirm the name (match it
+loosely: case and spacing) and that CapCut is closed, and `flow_capcut_build`. What the build does, so you can say it
+plainly:
+- every still and hero clip cut to the voiceover beat by beat, each still with its EDIT NOTE move (push, pull, pan,
+  shake), sized to fill the 16:9 frame; a hero beat holds its still first and hands over to its clip
+- music per chapter cue, ambience beds and the beat's sound effects, all from Claude's own sound library (made in code,
+  free, no downloads) unless the user's sound folder has a better match
+- day markers and ledger numbers as text, a cut to white at the end of the cold open
+
+Report what it placed, every cue with no fitting sound (`sfx_skipped`), any warnings, and runtime against narration, in
+a few lines. If a cue was skipped, rewording that beat's `sfx` or the chapter's `sound` line to plain words close to a
+library name ("door bang", "cans clinking", "wind", "tense music") and rebuilding usually fixes it; the build backs up
+and replaces the timeline each time.
 Then: "Open CapCut, check the edit and export it. Type 'next' for thumbnails." If the user wants the old timeline back,
 `flow_capcut_restore`.
 
@@ -102,8 +124,8 @@ if there is no voiceover). Save `branding` (`titles`, `description`, `hashtags`,
 
 ## Rules that always apply
 
-- Never spend credits without the explicit yes in STATE 6. Sheets, stills, thumbnails, narration and the CapCut build
-  are free; only hero clips cost credits.
+- Never spend credits without the explicit yes in STATE 6. Sheets, stills, thumbnails, narration, music, sound effects
+  and the CapCut build are free; only hero clips cost credits. Nothing needs FFmpeg.
 - Every generation prompt stays self-contained, with the locks pasted word for word, as engine.md requires. Apply the
   visual safety rules and audio-safe word swaps silently.
 - Never put on-screen text in a prompt. Day markers and ledger numbers come from `overlay` and the chapter markers,

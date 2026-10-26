@@ -15,6 +15,7 @@ import { channelDir, planClips, planSheets, planStills, planThumbnails, sheetPat
 import { buildCapcut, capcutRunning, DRAFTS_ROOT, listCapcutProjects, restoreCapcut } from "./capcut.js";
 import { clipFile, listProductions, productionShape, progress, readProduction, stillFile, thumbFile, writeProduction } from "./production.js";
 import { recordVoiceover } from "./voiceover.js";
+import { ensureSoundLibrary, SOUND_NAMES } from "./sound.js";
 
 export const OUTPUT_ROOT = process.env.FLOW_MCP_OUTPUT ?? join(homedir(), "flow-mcp-out");
 const words = (s: string) => s.split(/[^a-z0-9]+/i).filter((w) => w.length > 3).map((w) => w.toLowerCase());
@@ -742,7 +743,7 @@ export class LocalCore implements Core {
   async narrate({ project, text, voice, engine, style }: Args<"narrate">) {
     const output_dir = projectDir(project);
     mkdirSync(output_dir, { recursive: true });
-    const target = join(output_dir, `${this.nextStem(output_dir, "narration")}.m4a`);
+    const target = join(output_dir, `${this.nextStem(output_dir, "narration")}.wav`);
     const spoken = engine === "mac" ? await speakLocally(text.trim(), voice, target) : await speakWithGemini(text.trim(), voice, target, style);
     return { output_dir, credits: 0, engine, voice, ...spoken };
   }
@@ -811,7 +812,9 @@ export class LocalCore implements Core {
     const name = project ?? p.settings?.capcut_project;
     if (!name) throw new Error(`Which CapCut project? Pass project (see flow_capcut_projects; CapCut keeps them in ${DRAFTS_ROOT}).`);
     const sounds = audio_dir ?? audioDir();
-    const out = await buildCapcut({ dir, production: p, project: name, audio_dir: sounds, ...o });
+    // Claude's own music, ambience and effects, made in code the first time and kept in the channel folder.
+    const made = ensureSoundLibrary(join(channelDir(OUTPUT_ROOT), "sound"));
+    const out = await buildCapcut({ dir, production: p, project: name, audio_dir: sounds, library_dir: made.dir, ...o });
     writeProduction(dir, video, { settings: { capcut_project: name } });
     if (audio_dir) writeFileSync(SETTINGS_FILE, JSON.stringify({ ...readSettings(), audio_dir }, null, 2));
     return out;
@@ -830,7 +833,8 @@ export class LocalCore implements Core {
     }
     const dir = audioDir();
     const count = (sub: string) => (dir && existsSync(join(dir, sub)) ? readdirSync(join(dir, sub)).filter((f) => /\.(mp3|wav|m4a|aac|ogg|flac|aiff?)$/i.test(f)).length : 0);
-    return { audio_dir: dir ?? null, music: count("music"), sfx: count("sfx"), ambience: count("ambience"), capcut_drafts: DRAFTS_ROOT };
+    const library = { dir: join(channelDir(OUTPUT_ROOT), "sound"), music: SOUND_NAMES.music.length, sfx: SOUND_NAMES.sfx.length, ambience: SOUND_NAMES.ambience.length };
+    return { audio_dir: dir ?? null, music: count("music"), sfx: count("sfx"), ambience: count("ambience"), claude_library: library, capcut_drafts: DRAFTS_ROOT };
   }
 
   async techniques({ category }: Args<"techniques">) {

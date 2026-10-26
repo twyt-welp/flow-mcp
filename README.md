@@ -25,7 +25,7 @@ New here? [GETTING-STARTED.md](GETTING-STARTED.md) takes you from nothing to you
 | **Node.js 22 or newer** | `node --version` |
 | **Google Chrome** | Any recent version |
 | **A Google account** | Free. Flow gives every account 50 credits a day; a paid Google AI plan adds more and unlocks 1080p downloads. Developed on a Pro plan |
-| **FFmpeg** *(optional)* | Mac: `brew install ffmpeg` · Windows: `winget install Gyan.FFmpeg`. Needed only to join clips, mix music or record narration |
+| **FFmpeg** *(optional)* | Mac: `brew install ffmpeg` · Windows: `winget install Gyan.FFmpeg`. Not needed for the C5 pipeline (voiceover, sound and the CapCut build are plain code). Only the older tools use it: joining clips, captions, `.m4a` narration |
 | **A Google AI Studio key** *(optional, free)* | Only for the Google narration voices. See below |
 | **whisper.cpp** *(optional, free)* | Only for captions: it hears the words, on your computer. Mac: `brew install whisper-cpp` · Windows: `whisper-cli.exe` from [the whisper.cpp releases](https://github.com/ggml-org/whisper.cpp/releases), on your PATH. The speech model it needs downloads by itself the first time you caption a video: 148 MB for English, 574 MB for any other language |
 
@@ -196,14 +196,17 @@ the panel shows each video's progress and can run every Flow step itself.
 5. **Voice**: the whole script in one Google AI Studio voice, with every beat timed against it. Free.
 6. **CapCut**: import the files into a new CapCut project if you like, close CapCut, then **Build timeline** writes the
    edit straight into the project: stills and clips cut to the voice, push, pan and shake moves, music per chapter,
-   ambience and sound effects from your sound folder, day markers and ledger numbers. The project is backed up first
+   ambience and sound effects (Claude's own, made in code, or yours if you have them), day markers and ledger numbers. The project is backed up first
    and **Undo last build** restores it. Open CapCut and export.
 7. **Branding**: five thumbnails drawn in Flow, plus titles, description and hashtags to copy.
 
 Each video lives in `~/flow-mcp-out/<video>/`: `production.json` (everything the engine wrote), `sheets/`, `stills/`,
-`clips/`, `voice/` and `thumbs/`. The mascot sheet lives in `~/flow-mcp-out/_channel/sheets/`. Sounds come from a folder
-with `music`, `sfx` and `ambience` inside (set it on the CapCut tab; `~/youtube-studio/audio` is picked up by itself);
-files are matched to the engine's sound cues by their names, so `door_bang.wav` answers "door bang".
+`clips/`, `voice/` and `thumbs/`. The mascot sheet lives in `~/flow-mcp-out/_channel/sheets/`. Music, ambience and sound
+effects are Claude's own, synthesised in code the first time you build (8 music moods, 8 ambience beds, 30 effects,
+about 55 MB in `~/flow-mcp-out/_channel/sound/`), free and yours to use. You can add your own in a folder with `music`,
+`sfx` and `ambience` inside (set it on the CapCut tab; `~/youtube-studio/audio` is picked up by itself): files are
+matched to the engine's sound cues by their names, so `door_bang.wav` answers "door bang", and yours win when both fit.
+Beats are timed against the voiceover by whisper.cpp when it is installed, otherwise from the voice's own pauses.
 
 The CapCut step works with CapCut desktop projects saved as plain files, which CapCut 9.6 on Windows does. It replaces
 the project's timeline each time it runs. Tools: `flow_production`, `flow_productions`, `flow_c5_sheets`,
