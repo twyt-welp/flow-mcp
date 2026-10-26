@@ -1,6 +1,6 @@
 ---
 name: c5-reborn
-description: Run the C5 Reborn Apocalypse Engine end to end through the flow MCP server, from topics to Flow stills, hero clips, a Google voiceover, a CapCut timeline written straight into the project files, thumbnails and branding. Use when the user says "new C5 video", "new reborn video", "run the C5 engine" or "next reborn video", and when they ask to edit, sync or build a CapCut project ("edit my CapCut project - <name>", "sync the images and videos to the voice over", "build the timeline by writing the project files"), and when they ask to open or launch Flow Studio.
+description: Run the C5 Reborn Apocalypse Engine end to end through the flow MCP server, from topics to Flow stills, hero clips, a Google voiceover, a CapCut timeline written straight into the project files, thumbnails and branding. Use when the user says "new C5 video", "new reborn video", "run the C5 engine" or "next reborn video", and when they ask to edit, sync or build a CapCut project ("edit my CapCut project - [project name]", "sync the images and videos to the voice over", "build the timeline by writing the project files"), and when they ask to open or launch Flow Studio.
 ---
 
 # C5 Reborn Apocalypse Engine → Google Flow → CapCut
