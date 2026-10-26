@@ -12,8 +12,8 @@ thumbnail), then come back and say "redo still N". Keep replies short: what ran,
 
 ## Start
 
-1. `flow_open_studio` (opens the live dashboard in the user's browser; never use computer use for this). If the user only
-   asked to open Flow Studio, stop here.
+1. Flow Studio is already open from the writing pass, so do not open it again. Call `flow_open_studio` only when the
+   user asks to open Flow Studio (never use computer use for this), and if that was all they asked, stop there.
 2. `flow_status`. If not signed in or no project is open, tell the user to run `npm run login` in their flow-mcp folder,
    sign in and open a Flow project, and stop. Report plan and credits left in one line.
 3. `flow_productions`, then `flow_production` for the video (the newest with state "prompts_ready" or later; ask only if
