@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { z } from "zod";
@@ -10,6 +10,11 @@ import { characterLook, createCharacter, downloadAsset, trashAsset, editCharacte
 import { JobQueue, type Job } from "./queue.js";
 import { BIN, COMPUTER, IS_MAC, IS_WIN, moveToBin } from "./platform.js";
 import { TECHNIQUES, techniqueById } from "./techniques.js";
+import { HOME_DIR } from "./chrome.js";
+import { channelDir, planClips, planSheets, planStills, planThumbnails, sheetPath } from "./c5.js";
+import { buildCapcut, capcutRunning, DRAFTS_ROOT, listCapcutProjects, restoreCapcut } from "./capcut.js";
+import { clipFile, listProductions, productionShape, progress, readProduction, stillFile, thumbFile, writeProduction } from "./production.js";
+import { recordVoiceover } from "./voiceover.js";
 
 export const OUTPUT_ROOT = process.env.FLOW_MCP_OUTPUT ?? join(homedir(), "flow-mcp-out");
 const words = (s: string) => s.split(/[^a-z0-9]+/i).filter((w) => w.length > 3).map((w) => w.toLowerCase());
@@ -261,6 +266,67 @@ export const shapes = {
     voice: z.string().optional().describe("Flow voice name, e.g. 'Charon' (male, informative) or 'Aoede' (female, breezy)."),
   },
   techniques: { category: z.enum(["camera", "product", "transition", "image"]).optional() },
+  productions: {},
+  production: {
+    video: z.string().min(1).describe("The video's folder name, e.g. 'RebornFreeze'. A new name starts a new video."),
+    patch: productionShape
+      .optional()
+      .describe("Fields to save. Top-level fields replace what was there; `beats` merge by beat number (send just one chapter's beats with their prompts); `settings` and `branding` merge. Leave it out to only read."),
+    replace_beats: z.boolean().optional().describe("Replace the whole beat map instead of merging by number (use when the beat map is redone)."),
+  },
+  c5_sheets: {
+    video: z.string().min(1),
+    ids: z.array(z.string()).optional().describe("Sheet ids to draw (default: every sheet not drawn yet)."),
+    redo: z.boolean().default(false).describe("Draw again even if the sheet exists; the old file is kept beside it."),
+  },
+  c5_stills: {
+    video: z.string().min(1),
+    beats: z.array(z.number().int()).optional().describe("Beat numbers (default: every beat without a still)."),
+    redo: z.boolean().default(false),
+    mode: z
+      .enum(["agent", "one_by_one"])
+      .default("agent")
+      .describe("agent: one fast Flow Agent batch per chapter, with the sheets attached as references. one_by_one: paced single images with up to 3 sheets each; slower, best for redoing a few."),
+  },
+  c5_clips: {
+    video: z.string().min(1),
+    beats: z.array(z.number().int()).optional().describe("Hero beat numbers (default: every hero beat without a clip)."),
+    max_credits: z.number().int().min(0).describe("Per-clip cap: a clip whose Flow quote is higher is skipped and nothing is spent."),
+    acknowledge_cost: z.literal(true).describe("Must be true, and only after the user said yes to the estimated total."),
+    model: z.string().default("Omni 1.1 Flash"),
+    duration: z.union([z.literal(4), z.literal(6), z.literal(8), z.literal(10)]).default(6),
+    resolution: z.enum(["360p", "720p"]).default("720p"),
+    redo: z.boolean().default(false),
+  },
+  c5_thumbnails: {
+    video: z.string().min(1),
+    numbers: z.array(z.number().int()).optional(),
+    redo: z.boolean().default(false),
+  },
+  voiceover: {
+    video: z.string().min(1),
+    engine: z.enum(["gemini", "mac"]).default("gemini"),
+    voice: z.string().optional().describe("Google voice name (default: the video's saved voice, else Charon)."),
+    style: z.string().max(200).optional().describe("Delivery note, e.g. 'calm, low and tense, like a survival story told at night'."),
+  },
+  capcut_projects: {},
+  capcut_build: {
+    video: z.string().min(1),
+    project: z.string().min(1).optional().describe("CapCut project (folder) name, as listed by flow_capcut_projects. Default: the one saved for this video."),
+    audio_dir: z.string().optional().describe("Folder with the user's sounds: a 'music' subfolder, an 'sfx' subfolder and optionally 'ambience'. Default: the saved one."),
+    music_volume: z.number().min(0).max(1).default(0.3),
+    sfx_volume: z.number().min(0).max(1).default(0.5),
+    ambience_volume: z.number().min(0).max(1).default(0.25),
+    titles: z.boolean().default(true).describe("Day markers on screen at each chapter."),
+    ledger: z.boolean().default(true).describe("Ledger numbers and countdowns from the edit notes."),
+  },
+  capcut_restore: {
+    project: z.string().min(1),
+    backup: z.string().optional().describe("Backup file name; default the newest flow-mcp backup."),
+  },
+  settings: {
+    audio_dir: z.string().optional().describe("Folder holding the music, sfx and ambience folders."),
+  },
 };
 
 type Args<K extends keyof typeof shapes> = z.infer<z.ZodObject<(typeof shapes)[K]>>;
@@ -307,7 +373,25 @@ export interface Core {
   caption_preview(a: Args<"caption_preview">): Promise<unknown>;
   captions(a: Args<"captions">): Promise<unknown>;
   caption_setup(): Promise<unknown>;
+  productions(): Promise<unknown>;
+  production(a: Args<"production">): Promise<unknown>;
+  c5_sheets(a: Args<"c5_sheets">): Promise<unknown>;
+  c5_stills(a: Args<"c5_stills">): Promise<unknown>;
+  c5_clips(a: Args<"c5_clips">): Promise<unknown>;
+  c5_thumbnails(a: Args<"c5_thumbnails">): Promise<unknown>;
+  voiceover(a: Args<"voiceover">): Promise<unknown>;
+  capcut_projects(): Promise<unknown>;
+  capcut_build(a: Args<"capcut_build">): Promise<unknown>;
+  capcut_restore(a: Args<"capcut_restore">): Promise<unknown>;
+  settings(a: Args<"settings">): Promise<unknown>;
 }
+
+const SETTINGS_FILE = join(HOME_DIR, "settings.json");
+type Settings = { audio_dir?: string };
+const readSettings = (): Settings => (existsSync(SETTINGS_FILE) ? (JSON.parse(readFileSync(SETTINGS_FILE, "utf8")) as Settings) : {});
+// Where the user's own music and effects live. The first time, a youtube-studio/audio folder in the home folder is
+// picked up by itself, since that is where this channel keeps them.
+const audioDir = (s = readSettings()) => s.audio_dir ?? process.env.FLOW_MCP_AUDIO ?? [join(homedir(), "youtube-studio", "audio")].find((d) => existsSync(d));
 
 // Flow's own voices: still offered when giving a character a voice, but narration no longer goes through Flow.
 export const VOICES = [
@@ -661,6 +745,92 @@ export class LocalCore implements Core {
     const target = join(output_dir, `${this.nextStem(output_dir, "narration")}.m4a`);
     const spoken = engine === "mac" ? await speakLocally(text.trim(), voice, target) : await speakWithGemini(text.trim(), voice, target, style);
     return { output_dir, credits: 0, engine, voice, ...spoken };
+  }
+
+  /* ---------- C5 Reborn engine: one production record per video ---------- */
+
+  async productions() {
+    return { root: OUTPUT_ROOT, videos: listProductions(OUTPUT_ROOT) };
+  }
+
+  async production({ video, patch, replace_beats }: Args<"production">) {
+    const dir = projectDir(video);
+    const p = patch ? writeProduction(dir, video, patch, replace_beats) : readProduction(dir, video);
+    const files = {
+      sheets: Object.fromEntries((p.sheets ?? []).map((s) => [s.id, sheetPath(OUTPUT_ROOT, dir, s)]).filter(([, f]) => f)),
+      stills: Object.fromEntries((p.beats ?? []).map((b) => [b.n, stillFile(dir, b.n)]).filter(([, f]) => f)),
+      clips: Object.fromEntries((p.beats ?? []).filter((b) => b.hero).map((b) => [b.n, clipFile(dir, b.n)]).filter(([, f]) => f)),
+      thumbs: Object.fromEntries((p.thumbnails ?? []).map((t) => [t.n, thumbFile(dir, t.n)]).filter(([, f]) => f)),
+    };
+    return { dir, channel: channelDir(OUTPUT_ROOT), production: p, progress: progress(dir, p), files, saved: Boolean(patch) };
+  }
+
+  private queueAll(list: Parameters<JobQueue["add"]>[0][]) {
+    return list.map((params) => jobView(this.queue.add(params)));
+  }
+
+  async c5_sheets({ video, ids, redo }: Args<"c5_sheets">) {
+    const dir = projectDir(video);
+    const jobs = this.queueAll(planSheets(OUTPUT_ROOT, dir, readProduction(dir, video), ids, redo));
+    return { jobs, note: jobs.length ? "Sheets are free images. The mascot sheet is saved once for the channel and reused by every video." : "Every sheet is drawn already. Pass redo: true to draw one again." };
+  }
+
+  async c5_stills({ video, beats, redo, mode }: Args<"c5_stills">) {
+    const dir = projectDir(video);
+    return { jobs: this.queueAll(planStills(OUTPUT_ROOT, dir, readProduction(dir, video), beats, redo, mode)), credits: 0 };
+  }
+
+  async c5_clips({ video, beats, max_credits, model, duration, resolution, redo }: Args<"c5_clips">) {
+    const dir = projectDir(video);
+    const plan = planClips(dir, readProduction(dir, video), beats, redo, { max_credits, model, duration, resolution });
+    return { jobs: this.queueAll(plan.jobs), skipped: plan.skipped, cap_per_clip: max_credits };
+  }
+
+  async c5_thumbnails({ video, numbers, redo }: Args<"c5_thumbnails">) {
+    const dir = projectDir(video);
+    return { jobs: this.queueAll(planThumbnails(OUTPUT_ROOT, dir, readProduction(dir, video), numbers, redo)), credits: 0 };
+  }
+
+  async voiceover({ video, engine, voice, style }: Args<"voiceover">) {
+    const dir = projectDir(video);
+    const p = readProduction(dir, video);
+    const v = voice ?? p.settings?.voice ?? "Charon";
+    const st = style ?? p.settings?.style;
+    const timing = await recordVoiceover(dir, p, { engine, voice: v, style: st });
+    writeProduction(dir, video, { settings: { voice: v, style: st } });
+    return { file: timing.file, seconds: timing.total, aligned: timing.aligned, chapters: timing.chapters, beats: timing.beats.length, credits: 0 };
+  }
+
+  async capcut_projects() {
+    return { ...listCapcutProjects(), capcut_open: await capcutRunning(), audio_dir: audioDir() ?? null };
+  }
+
+  async capcut_build({ video, project, audio_dir, ...o }: Args<"capcut_build">) {
+    const dir = projectDir(video);
+    const p = readProduction(dir, video);
+    const name = project ?? p.settings?.capcut_project;
+    if (!name) throw new Error(`Which CapCut project? Pass project (see flow_capcut_projects; CapCut keeps them in ${DRAFTS_ROOT}).`);
+    const sounds = audio_dir ?? audioDir();
+    const out = await buildCapcut({ dir, production: p, project: name, audio_dir: sounds, ...o });
+    writeProduction(dir, video, { settings: { capcut_project: name } });
+    if (audio_dir) writeFileSync(SETTINGS_FILE, JSON.stringify({ ...readSettings(), audio_dir }, null, 2));
+    return out;
+  }
+
+  async capcut_restore({ project, backup }: Args<"capcut_restore">) {
+    return restoreCapcut(project, backup);
+  }
+
+  async settings({ audio_dir }: Args<"settings">) {
+    const cur = readSettings();
+    if (audio_dir !== undefined) {
+      if (audio_dir && !existsSync(audio_dir)) throw new Error(`There's no folder at ${audio_dir}.`);
+      mkdirSync(HOME_DIR, { recursive: true });
+      writeFileSync(SETTINGS_FILE, JSON.stringify({ ...cur, audio_dir: audio_dir || undefined }, null, 2));
+    }
+    const dir = audioDir();
+    const count = (sub: string) => (dir && existsSync(join(dir, sub)) ? readdirSync(join(dir, sub)).filter((f) => /\.(mp3|wav|m4a|aac|ogg|flac|aiff?)$/i.test(f)).length : 0);
+    return { audio_dir: dir ?? null, music: count("music"), sfx: count("sfx"), ambience: count("ambience"), capcut_drafts: DRAFTS_ROOT };
   }
 
   async techniques({ category }: Args<"techniques">) {

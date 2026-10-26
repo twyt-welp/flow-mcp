@@ -1,0 +1,116 @@
+---
+name: c5-reborn
+description: Run the C5 Reborn Apocalypse Engine end to end through the flow MCP server, from topics to Flow stills, hero clips, a Google voiceover, a CapCut timeline written straight into the project files, thumbnails and branding. Use when the user says "new C5 video", "new reborn video", "run the C5 engine" or "next reborn video".
+---
+
+# C5 Reborn Apocalypse Engine → Google Flow → CapCut
+
+`engine.md` in this folder is the creative engine: states, locks (MASCOT, STYLE, FLASHBACK, THREAT, BASE), series
+rules, visual safety rules, audio-safe word swaps, timing and every prompt format. Read it in full at the start and
+follow it exactly, except where this file overrides it. The overrides turn "paste this into your video tool" into real
+`flow` tool calls, so the user approves results instead of copying prompts.
+
+Everything for one video is saved with `flow_production` (one record per video, in its own folder). Save each state's
+output there as you produce it: the other tools read their prompts from it, and Flow Studio
+(http://127.0.0.1:8787) shows it live, tab by tab, so the user can watch and redo things there too.
+
+## Before STATE 1
+
+1. Call `flow_status`. If not signed in or no project is open, stop and tell the user to run `npm run login` in their
+   flow-mcp folder, sign in and open a Flow project.
+2. Report the plan and credits left in one line, and say Flow Studio is the live dashboard at http://127.0.0.1:8787.
+3. Call `flow_productions`. If a video is part-way through, ask once whether to carry on with it or start a new one.
+4. Pick the video's folder name now: `C5-<yyyy-mm-dd>`, renamed in spirit by its title later (the folder name stays).
+
+## State overrides
+
+Keep every HARD STOP and closing line from engine.md. The user approves in chat or in Flow Studio.
+
+**STATE 1 — Topics and ideas.** If the user gave a list of topics (in chat, or typed into Flow Studio's Topics tab, which saves them as `my_topics`), build the 10 ideas from those topics first (keep the
+engine's grid and variety rules for the rest). Save them with `flow_production` as `topics` (`n`, `title`, `hook`) and
+`state: "ideas"`. When the user picks, save `picked` and a working `title`.
+
+**STATE 2 — Script.** Unchanged, except the voice is Google's, not ElevenLabs. Save the script as `script.chapters`
+(one entry per chapter: `marker` exactly as written, `flashback`, and the chapter's narration paragraph as `text`),
+plus `ledger` and `contrasts`. Each extension re-saves the whole script.
+
+**STATE 3 — Cast & base (free).** Write the blocks exactly as engine.md says, then save them as `sheets`:
+- `{ id: "mascot", kind: "mascot", handle: "@YOU", lock: <MASCOT LOCK>, prompt: <the mascot sheet prompt> }`. The
+  mascot sheet is drawn once for the whole channel and reused forever; only include it if `flow_production` shows no
+  `mascot` in `files.sheets`.
+- each supporting character: `{ id: "sister", kind: "character", handle: "@SISTER", lock, prompt }`
+- `{ id: "threat", kind: "threat", lock, prompt }` and `{ id: "base", kind: "base", lock: <all four versions>, prompt }`
+
+Call `flow_c5_sheets`, then `flow_wait` until finished, show the file paths, and ask the closing question. On a change,
+update that sheet's lock and prompt, then `flow_c5_sheets` with its `ids` and `redo: true`.
+
+**STATE 4 — Beat map.** Output the table as engine.md says, and save `beats` with `replace_beats: true`: `n`, `chapter`
+(the exact marker), `text` (the beat's exact spoken words: every chapter's beats together must be its whole paragraph,
+in order, with nothing left out; the voiceover is timed from these), `shot`, `base`, `flashback`, `who`, `hero`.
+
+**STATE 5 — Scene stills (free, one chapter per turn).** Write the chapter's still prompts exactly as engine.md says,
+then save them onto the beats (merge by `n`):
+- `still_prompt`: the whole prompt, locks pasted word for word, ending with its NEGATIVE PROMPT
+- `move`: the EDIT NOTE move as `push_in`, `pull_out`, `pan_left`, `pan_right` or `hold` (use `shake` for an impact
+  beat: a door slam, a crash, the threat breaking through)
+- `overlay`: the EDIT NOTE overlay text exactly as it should read on screen ("$4,200 LEFT", "30 DAYS LEFT"), empty for none
+- `sfx`: the effects that land on this beat, in plain words ("door bang", "cans clinking")
+
+Save the chapter's SOUND line into `sound` (`chapter`, `music`, `sfx`, `ambient`). Then call `flow_c5_stills` with that
+chapter's beat numbers and `flow_wait` until finished. Show the paths, then the engine's closing line. If the user names
+stills to redo, adjust their prompts if needed and call `flow_c5_stills` with those `beats`, `redo: true`,
+`mode: "one_by_one"`.
+
+**STATE 6 — Motion clips (paid).** Write one clip prompt per ★ beat as engine.md says and save it as `clip_prompt`.
+Skip the AGENT INSTRUCTION BLOCK: these tools are the agent. Then:
+- Ask once, if not already saved in `settings.max_credits`: the per-clip credit cap (default 15). Save it.
+- State the estimate: number of hero clips × about 10 credits (Omni 1.1 Flash, 6 s, 720p), and ask
+  "Spend about N credits on these N clips? (yes / no)". Wait for yes.
+- `flow_c5_clips` with `max_credits` = the cap and `acknowledge_cost: true`, then `flow_wait` until finished. A clip
+  over the cap is skipped and costs nothing: say which. A clip made but not downloaded is in Flow: `flow_download` it,
+  never generate it again. Use `flow_retry` for failed jobs.
+- End with "Type 'next' for your voiceover."
+
+**NEW STATE 6b — Voiceover (free).** `flow_voices`. The first time for this channel (no `settings.voice` saved on any
+earlier video), record two short samples of the cold open with `flow_narrate` in two fitting Google voices and let the
+user pick. Then `flow_voiceover` with the chosen voice and a style note such as "calm, low and tense, like a survival
+story told at night". Report the runtime against the engine's target, then end with
+"Type 'next' to set up CapCut."
+
+**NEW STATE 6c — CapCut (free).** Tell the user, in this order, in a short numbered list:
+1. Open CapCut and make a new project (name it after the video).
+2. Import the video's `stills` and `clips` folders and `voice/narration.wav` (the folder path is in `flow_production`'s
+   `dir`). Importing is optional, but it puts the files in CapCut's media panel.
+3. Close CapCut completely.
+
+Ask "Tell me the CapCut project name when CapCut is closed." Then `flow_capcut_projects` to confirm the name and that
+CapCut is closed, and `flow_capcut_build`. Report what it placed (stills, clips, music, effects, titles, ledger), every
+cue with no matching sound file, and runtime against narration, in a few lines. Missing sounds: tell the user which
+file names to add to their `music` or `sfx` folder and offer to rebuild (it backs up and replaces the timeline each time).
+Then: "Open CapCut, check the edit and export it. Type 'next' for thumbnails." If the user wants the old timeline back,
+`flow_capcut_restore`.
+
+**STATE 7 — Thumbnails (free).** Write the 5 prompts as engine.md says, save them as `thumbnails` (`n` 1-5, `template`,
+`prompt`) and the OVERLAY TEXT as `overlay_text`, then `flow_c5_thumbnails` and `flow_wait`. Show the paths and the
+overlay text, then the closing line.
+
+**STATE 8 — Branding & export.** Unchanged, except the CHAPTERS timestamps come from the real voiceover: read
+`voice/timing.json` chapter starts through `flow_production`'s `progress.voice` (fall back to 150 words per minute only
+if there is no voiceover). Save `branding` (`titles`, `description`, `hashtags`, `next`) and `state: "done"`.
+
+**STATE 9 — Reset.** Unchanged. A new video gets a new folder; the mascot sheet carries over by itself.
+
+## Rules that always apply
+
+- Never spend credits without the explicit yes in STATE 6. Sheets, stills, thumbnails, narration and the CapCut build
+  are free; only hero clips cost credits.
+- Every generation prompt stays self-contained, with the locks pasted word for word, as engine.md requires. Apply the
+  visual safety rules and audio-safe word swaps silently.
+- Never put on-screen text in a prompt. Day markers and ledger numbers come from `overlay` and the chapter markers,
+  and the CapCut build places them as text.
+- Flow runs one job at a time with a 25-70 s pause between jobs; an agent batch draws a whole chapter at once. Give a
+  rough time estimate when queueing many jobs and don't apologise for the pace.
+- If Flow silently blocks a prompt, soften the wording with the audio-safe swaps and retry once, then tell the user
+  which beat needs a manual look.
+- Tell the user file paths in plain words. Never paste the Google AI Studio key into chat: it is saved in Flow Studio's
+  Voice tab.

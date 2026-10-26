@@ -1665,6 +1665,8 @@ export async function runContinue(job: Job): Promise<string[]> {
   }
 }
 
+const UPLOADED_REFS = new Map<string, string>();
+
 export async function runAgentBatch(job: Job): Promise<string[]> {
   const state = await getFlowState();
   if (!state.signedIn || !state.inProject) throw new Error(state.hint);
@@ -1683,13 +1685,22 @@ export async function runAgentBatch(job: Job): Promise<string[]> {
   let agentProblem = "";
   try {
     // References are uploaded once with readable names (the agent sees them), before Agent mode hides the upload menu.
+    // A file already uploaded by an earlier batch in this run is attached by its Flow title instead of uploaded again, so
+    // a video made chapter by chapter does not fill the project with copies of the same reference sheets.
     if (s.agent_refs?.length && !s.agent_ref_assets?.length) {
       await setAgentMode(page, false);
       const assets: string[] = [];
       for (const [k, r] of s.agent_refs.entries()) {
+        const known = r.image.startsWith(ASSET_PREFIX) ? undefined : UPLOADED_REFS.get(`${r.image}|${statSync(r.image).mtimeMs}`);
+        if (known) {
+          assets.push(known);
+          continue;
+        }
         step(job, `uploading reference ${k + 1} of ${s.agent_refs.length} (${r.name})`);
         const label = r.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 24) || `ref${k + 1}`;
-        assets.push(await uploadAsset(page, job, r.image, label));
+        const title = await uploadAsset(page, job, r.image, label);
+        if (!r.image.startsWith(ASSET_PREFIX)) UPLOADED_REFS.set(`${r.image}|${statSync(r.image).mtimeMs}`, title);
+        assets.push(title);
       }
       s.agent_ref_assets = assets;
     }

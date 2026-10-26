@@ -183,6 +183,39 @@ agree on what is running. That API listens on 127.0.0.1 only and needs a per-run
 
 ---
 
+## The C5 Reborn pipeline
+
+Flow Studio opens on a seven-step pipeline for long-form "reborn before the apocalypse" videos, driven by the
+C5 Reborn Apocalypse Engine (`skills/c5-reborn/engine.md`). Claude does the writing through the `c5-reborn` skill;
+the panel shows each video's progress and can run every Flow step itself.
+
+1. **Topics**: type your own topics; Claude turns them into ten ideas and writes the script by chapter.
+2. **Cast**: the mascot sheet (drawn once for the whole channel), supporting characters, the threat and the base. Free.
+3. **Stills**: one still per beat, drawn a chapter at a time by Flow's agent with the sheets attached. Free.
+4. **Hero clips**: a 6-second clip for each ★ beat, starting on its own still, with a credit cap per clip.
+5. **Voice**: the whole script in one Google AI Studio voice, with every beat timed against it. Free.
+6. **CapCut**: import the files into a new CapCut project if you like, close CapCut, then **Build timeline** writes the
+   edit straight into the project: stills and clips cut to the voice, push, pan and shake moves, music per chapter,
+   ambience and sound effects from your sound folder, day markers and ledger numbers. The project is backed up first
+   and **Undo last build** restores it. Open CapCut and export.
+7. **Branding**: five thumbnails drawn in Flow, plus titles, description and hashtags to copy.
+
+Each video lives in `~/flow-mcp-out/<video>/`: `production.json` (everything the engine wrote), `sheets/`, `stills/`,
+`clips/`, `voice/` and `thumbs/`. The mascot sheet lives in `~/flow-mcp-out/_channel/sheets/`. Sounds come from a folder
+with `music`, `sfx` and `ambience` inside (set it on the CapCut tab; `~/youtube-studio/audio` is picked up by itself);
+files are matched to the engine's sound cues by their names, so `door_bang.wav` answers "door bang".
+
+The CapCut step works with CapCut desktop projects saved as plain files, which CapCut 9.6 on Windows does. It replaces
+the project's timeline each time it runs. Tools: `flow_production`, `flow_productions`, `flow_c5_sheets`,
+`flow_c5_stills`, `flow_c5_clips`, `flow_c5_thumbnails`, `flow_voiceover`, `flow_capcut_projects`,
+`flow_capcut_build`, `flow_capcut_restore`. The earlier panels (Frames, Shots, Cut, Captions and the rest) are under
+**More tools**.
+
+To use the skill, add the `skills/c5-reborn` folder to Claude as a skill (zip it, or copy it into your skills folder),
+then say *"new C5 video"*.
+
+---
+
 ## Tools
 
 | Tool | Purpose |
