@@ -42,6 +42,9 @@ double-click `Flow Studio.cmd` in their flow-mcp folder.
 
 ## Before STATE 1
 
+0. Always, first: call `flow_open_studio` so the user can read along in Flow Studio's dashboard while you write
+   (it only opens the panel in their browser and never touches Flow).
+
 (Steps 1 and 2 only in the all-in-one-go run.)
 
 1. Call `flow_status`. If not signed in or no project is open, stop and tell the user to run `npm run login` in their
