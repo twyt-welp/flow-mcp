@@ -361,6 +361,10 @@ The preview tool could not read the project while it lived in ~/Desktop; check t
   message if it stays foreign. Verified: the Flow tab put into Spanish, then a free still through a test MCP ->
   switched to English, generated and downloaded (0 credits, 39 s).
 
+- DUNE LOOK (2026-10-26, Tanya picked it from a clickable preview of six calm themes): one theme only, warm espresso
+  dark (tokens in :root), Inter body + Newsreader headings, 1px borders, no uppercase or noise, steps as a left sidebar
+  (.shell grid) on wide screens and a scrolling strip on phones, Dashboard tab first. The calm overrides sit in the
+  LAST <style> block; new rules must come after them.
 - COMPACT STUDIO (2026-10-13, the user found it "too big and bulky"): one density pass over the CSS, same look (stripe,
   display font, orange tally, button styles). Floors kept on purpose: body and input text >= 16 px (iOS zooms into
   smaller inputs; the global mobile-first rule), buttons and segments >= 38-46 px tall. Title on one line, 12 px
