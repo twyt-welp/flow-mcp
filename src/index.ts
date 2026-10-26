@@ -6,6 +6,7 @@ import { LocalCore, shapes, type Core } from "./core.js";
 import { PLAYBOOK } from "./playbook.js";
 import { RemoteCore } from "./remote.js";
 import { PORT, startServer } from "./server.js";
+import { openUrl } from "./platform.js";
 
 const local = new LocalCore();
 const role = await startServer(local);
@@ -94,6 +95,25 @@ server.registerTool(
     annotations: { readOnlyHint: true, openWorldHint: true },
   },
   (args) => reply(core.status(args), { studio, playbook: PLAYBOOK, ...(tasks.size ? { slow_calls: [...tasks.values()].map(({ result, ...t }) => t) } : {}) }),
+);
+
+server.registerTool(
+  "flow_open_studio",
+  {
+    title: "Open Flow Studio",
+    description:
+      "Open the Flow Studio panel in the user's own browser. This MCP server already serves it while Claude runs, so nothing has to be double-clicked. Use when the user says \"open Flow Studio\", \"launch Studio\" or \"show me the panel\". Never use computer use for this.",
+    inputSchema: {},
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  },
+  () =>
+    reply(
+      (async () => {
+        if (!studio) throw new Error(`Port ${PORT} is used by another program, so Flow Studio cannot run. Set FLOW_MCP_PORT to a free port.`);
+        openUrl(studio);
+        return { opened: studio, note: "Studio stays up as long as Claude is running; no window needs to stay open." };
+      })(),
+    ),
 );
 
 server.registerTool(

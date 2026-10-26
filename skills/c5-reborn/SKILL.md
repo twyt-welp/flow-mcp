@@ -1,6 +1,6 @@
 ---
 name: c5-reborn
-description: Run the C5 Reborn Apocalypse Engine end to end through the flow MCP server, from topics to Flow stills, hero clips, a Google voiceover, a CapCut timeline written straight into the project files, thumbnails and branding. Use when the user says "new C5 video", "new reborn video", "run the C5 engine" or "next reborn video", and when they ask to edit, sync or build a CapCut project ("edit my CapCut project - <name>", "sync the images and videos to the voice over", "build the timeline by writing the project files").
+description: Run the C5 Reborn Apocalypse Engine end to end through the flow MCP server, from topics to Flow stills, hero clips, a Google voiceover, a CapCut timeline written straight into the project files, thumbnails and branding. Use when the user says "new C5 video", "new reborn video", "run the C5 engine" or "next reborn video", and when they ask to edit, sync or build a CapCut project ("edit my CapCut project - <name>", "sync the images and videos to the voice over", "build the timeline by writing the project files"), and when they ask to open or launch Flow Studio.
 ---
 
 # C5 Reborn Apocalypse Engine → Google Flow → CapCut
@@ -14,11 +14,18 @@ Everything for one video is saved with `flow_production` (one record per video, 
 output there as you produce it: the other tools read their prompts from it, and Flow Studio
 (http://127.0.0.1:8787) shows it live, tab by tab, so the user can watch and redo things there too.
 
+## Opening Flow Studio
+
+When the user only asks to open or launch Flow Studio, call `flow_open_studio` and reply with the address. Never use
+computer use for it. If the flow tools are missing, the connector is not running: tell the user to restart Claude, or to
+double-click `Flow Studio.cmd` in their flow-mcp folder.
+
 ## Before STATE 1
 
 1. Call `flow_status`. If not signed in or no project is open, stop and tell the user to run `npm run login` in their
    flow-mcp folder, sign in and open a Flow project.
-2. Report the plan and credits left in one line, and say Flow Studio is the live dashboard at http://127.0.0.1:8787.
+2. Report the plan and credits left in one line. Call `flow_open_studio` so the live dashboard opens in the user's
+   browser (http://127.0.0.1:8787); nothing needs double-clicking.
 3. Call `flow_productions`. If a video is part-way through, ask once whether to carry on with it or start a new one.
 4. Pick the video's folder name now: `C5-<yyyy-mm-dd>`, renamed in spirit by its title later (the folder name stays).
 
