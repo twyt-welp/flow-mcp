@@ -544,4 +544,9 @@ The preview tool could not read the project while it lived in ~/Desktop; check t
   the Python in `<studio>/openvoice/.venv` with the checkout at `<studio>/openvoice/OpenVoice` (checkpoints_v2 inside),
   overridable in `channel/openvoice.json`. Reference = `channel/voice-reference.wav` (Tanya's 8.6 min recording; the
   whole file feeds the VAD segments), speaker embedding cached as `channel/openvoice-se.pth`. No word times, so beats
-  fall back to the voice's pauses. Plumbing tested with a fake Python; the real model has not run yet.
+  fall back to the voice's pauses. INSTALLED AND VERIFIED on the PC 2026-10-27: uv Python 3.10.22 in openvoice\python,
+  torch 2.5.1+cu121 (CUDA true), the fork at 74a1d14 (-e), MeloTTS 0.1.2, UniDic (526 MB, needed even for English),
+  checkpoints from Hugging Face myshell-ai/OpenVoiceV2 (the S3 link is dead). Pins: faster-whisper 1.0.3 via
+  openvoice\overrides.txt (0.9.0 needs av 10, which fails to compile on Windows) - any reinstall must pass
+  `--override openvoice\overrides.txt`; setuptools 69.5.1 (librosa 0.9.1 needs pkg_resources). First take 63 s (builds
+  openvoice-se.pth), later takes ~26 s, mostly model loading. openvoice_say.py ran unchanged.
