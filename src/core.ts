@@ -315,7 +315,7 @@ export const shapes = {
     engine: z
       .enum(["elevenlabs", "openvoice", "gemini", "mac"])
       .optional()
-      .describe("'openvoice' = the user's own cloned voice (free, on this computer). Default: 'elevenlabs' once an ElevenLabs key is saved, else 'gemini'."),
+      .describe("'openvoice' = the user's own cloned voice (free, on this computer). Default: 'openvoice' once it is set up on this computer, else 'elevenlabs' once an ElevenLabs key is saved, else 'gemini'."),
     voice: z.string().optional().describe("ElevenLabs: a voice ID (default: the channel's saved voice). Google: a voice name (default: the video's saved voice, else Charon)."),
     style: z.string().max(200).optional().describe("Delivery note, e.g. 'calm, low and tense, like a survival story told at night'."),
   },
@@ -817,7 +817,7 @@ export class LocalCore implements Core {
   async voiceover({ video, engine, voice, style }: Args<"voiceover">) {
     const dir = projectDir(video);
     const p = readProduction(dir, video);
-    const eng = engine ?? (elevenKey() ? "elevenlabs" : "gemini");
+    const eng = engine ?? (openVoiceReady().ready ? "openvoice" : elevenKey() ? "elevenlabs" : "gemini");
     const st = style ?? p.settings?.style;
     if (eng === "elevenlabs") {
       const id = voice ?? elevenVoice();

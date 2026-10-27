@@ -1,6 +1,6 @@
 ---
 name: c5-flow-run
-description: Send a C5 video's saved prompts to Google Flow and finish it - character sheets, stills, paid hero clips under a credit cap, the voiceover (ElevenLabs, or Google), the CapCut timeline written into the project files, and thumbnails. Built for a cheaper model; it never writes prompts. Use when the user says "run C5 in Flow", "send my prompts to Flow", "draw the stills", "make the clips", "redo still N", "record the voiceover", "open Flow Studio", or asks to edit, sync or build a CapCut project ("edit my CapCut project - [project name]", "build the timeline by writing the project files").
+description: Send a C5 video's saved prompts to Google Flow and finish it - character sheets, stills, paid hero clips under a credit cap, the voiceover (the user's own cloned voice, or ElevenLabs), the CapCut timeline written into the project files, and thumbnails. Built for a cheaper model; it never writes prompts. Use when the user says "run C5 in Flow", "send my prompts to Flow", "draw the stills", "make the clips", "redo still N", "record the voiceover", "open Flow Studio", or asks to edit, sync or build a CapCut project ("edit my CapCut project - [project name]", "build the timeline by writing the project files").
 ---
 
 # C5 in Flow: send the saved prompts
@@ -33,12 +33,13 @@ Each queues jobs: `flow_wait` until they finish (it answers within a minute; cal
    cap is skipped at no cost: say which. A clip made but not downloaded is already in Flow: `flow_download` it, never
    generate it again. `flow_retry` for a failed job. If a paid job vanishes from the queue, look at the grid
    (`flow_assets`) before running anything again.
-4. **Voiceover.** `flow_voices`. If the user wants their own voice ("my voice", "my cloned voice") and `openvoice.ready`
-   is true, call `flow_voiceover` with `video` and `engine: "openvoice"` (free, on their computer; beats are timed from
-   the voice's pauses). Otherwise, if `elevenlabs_ready` is true and `elevenlabs_voice` is set, call `flow_voiceover`
-   with just `video`: it uses the channel's ElevenLabs voice and times every beat from the words it reports (this uses
-   the user's ElevenLabs characters, roughly one per letter of the script, no Flow credits). If no ElevenLabs key or
-   voice is saved, tell the user to paste them in Flow Studio, step 5 Voice ("ElevenLabs key", "Voice ID", Save) and
+4. **Voiceover.** `flow_voices`. The channel's DEFAULT voice is the user's own cloned voice: if `openvoice.ready` is
+   true, call `flow_voiceover` with `video` and `engine: "openvoice"` (free, on their computer, about half a minute per
+   take; beats are timed from the voice's pauses). If it is not ready, say what `openvoice.missing` names and offer
+   ElevenLabs. ElevenLabs is the other option, used only when the user asks for it ("use ElevenLabs"): if
+   `elevenlabs_ready` is true and `elevenlabs_voice` is set, call `flow_voiceover` with `video` and
+   `engine: "elevenlabs"`; it times every beat from the words it reports (this uses the user's ElevenLabs characters,
+   roughly one per letter of the script, no Flow credits). If no ElevenLabs key or voice is saved, tell the user to paste them in Flow Studio, step 5 Voice ("ElevenLabs key", "Voice ID", Save) and
    wait; never ask for the key in chat. Only if the user asks for the free Google voice instead: `flow_voiceover` with
    `engine: "gemini"`, the voice (`settings.voice`, or two short `flow_narrate` samples to choose from) and a style note
    of a few words. Report the runtime.

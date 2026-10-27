@@ -412,7 +412,7 @@ server.registerTool(
   "flow_voiceover",
   {
     title: "Record the whole voiceover and time every beat",
-    description: "Speak the saved script in the channel's ElevenLabs voice (default once an ElevenLabs key is saved in Flow Studio's Voice step; uses the user's ElevenLabs characters, no Flow credits) or a free Google AI Studio voice, in a few long takes, join them into voice/narration.wav, and work out when every beat is spoken (ElevenLabs reports each word's time itself; for Google, whisper.cpp word times when installed, otherwise the voice's own pauses). Never ask for or handle the keys: the user saves them in the panel. The CapCut build is cut to these times. Re-running only re-records takes whose text changed.",
+    description: "Speak the saved script in the user's own cloned voice (OpenVoice, free, the default once it is set up on this computer), the channel's ElevenLabs voice (engine 'elevenlabs', the other option; uses the user's ElevenLabs characters, no Flow credits) or a free Google AI Studio voice, in a few long takes, join them into voice/narration.wav, and work out when every beat is spoken (ElevenLabs reports each word's time itself; for OpenVoice and Google, whisper.cpp word times when installed, otherwise the voice's own pauses). Never ask for or handle the keys: the user saves them in the panel. The CapCut build is cut to these times. Re-running only re-records takes whose text changed.",
     inputSchema: shapes.voiceover,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
   },

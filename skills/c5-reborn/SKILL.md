@@ -61,7 +61,7 @@ Keep every HARD STOP and closing line from engine.md. The user approves in chat 
 engine's grid and variety rules for the rest). Save them with `flow_production` as `topics` (`n`, `title`, `hook`) and
 `state: "ideas"`. When the user picks, save `picked` and a working `title`.
 
-**STATE 2 — Script.** Unchanged; the voice is the user's ElevenLabs voice. Save the script as `script.chapters`
+**STATE 2 — Script.** Unchanged; the voice is the user's own cloned voice (ElevenLabs is the other option). Save the script as `script.chapters`
 (one entry per chapter: `marker` exactly as written, `flashback`, and the chapter's narration paragraph as `text`),
 plus `ledger` and `contrasts`. Each extension re-saves the whole script.
 
@@ -108,9 +108,10 @@ Skip the AGENT INSTRUCTION BLOCK: these tools are the agent. Then:
   never generate it again. Use `flow_retry` for failed jobs.
 - End with "Type 'next' for your voiceover."
 
-**NEW STATE 6b — Voiceover.** The channel's voice is the user's own ElevenLabs voice, saved in Flow Studio's Voice
-step with their key. `flow_voices`: if `elevenlabs_ready` and `elevenlabs_voice` are set, `flow_voiceover` with just
-`video`; otherwise ask the user to paste the key and voice ID into Flow Studio (never into chat) and wait. Use the free
+**NEW STATE 6b — Voiceover.** The channel's default voice is the user's own cloned voice (OpenVoice, free, on their
+computer). `flow_voices`: if `openvoice.ready`, `flow_voiceover` with `video` and `engine: "openvoice"`. ElevenLabs is
+the other option, only when the user asks for it: if `elevenlabs_ready` and `elevenlabs_voice` are set,
+`flow_voiceover` with `video` and `engine: "elevenlabs"`; otherwise ask the user to paste the key and voice ID into Flow Studio (never into chat) and wait. Use the free
 Google voice (`engine: "gemini"`, a voice and a short style note) only if the user asks for it. Report the runtime against
 the engine's target, then end with "Type 'next' to set up CapCut."
 
