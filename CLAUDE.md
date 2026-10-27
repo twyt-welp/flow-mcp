@@ -527,3 +527,8 @@ The preview tool could not read the project while it lived in ~/Desktop; check t
   name, else " at "). Same run: "Flow has no "x1" option" after the model menu picked Nano Banana 2.1 - choosing a
   model can close the settings popover, so applySettings reopens it, and pickCount accepts the chip already showing
   the count. Neither fix has been re-run live yet.
+- CHANNEL MASCOT (2026-10-27, Tanya's own sheet): the mascot picture lives with the code at `channel/sheets/mascot.jpg`
+  (gitignored, the user's art). mascotSheet() finds it after the video's and _channel's sheets and copies it into
+  `<output>/_channel/sheets/` so the panel can show it; withMascot() attaches it to every still and thumbnail even when
+  a record lists no mascot sheet, and planSheets never redraws it, redo or not. engine.md's MASCOT LOCK was rewritten
+  to match the sheet (messy brown hair, full sleeves, off-white hands, flap backpack).

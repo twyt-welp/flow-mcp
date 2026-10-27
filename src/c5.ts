@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, renameSync } from "node:fs";
 import { join } from "node:path";
-import { clipFile, pad, sheetFile, stillFile, thumbFile, type Beat, type Production } from "./production.js";
+import { clipFile, mascotSheet, OWN_CHANNEL_DIR, pad, sheetFile, stillFile, thumbFile, type Beat, type Production } from "./production.js";
 import type { SceneParams } from "./queue.js";
 
 // Turns a video's production record into Flow jobs. Every prompt is used exactly as the engine wrote it (the locks are
@@ -8,11 +8,18 @@ import type { SceneParams } from "./queue.js";
 
 type Sheet = NonNullable<Production["sheets"]>[number];
 
-// The mascot sheet is made once for the channel and reused by every video, as the engine says.
+// The mascot sheet is the channel's own picture (see mascotSheet) and is reused by every video, as the engine says.
 export const channelDir = (root: string) => join(root, "_channel");
 
 export function sheetPath(root: string, dir: string, s: Pick<Sheet, "id" | "kind">): string | undefined {
-  return sheetFile(dir, s.id) ?? (s.kind === "mascot" ? sheetFile(channelDir(root), s.id) : undefined);
+  return s.kind === "mascot" ? mascotSheet(dir) : sheetFile(dir, s.id);
+}
+
+// The mascot rides along with every still and thumbnail even when this video's record lists no mascot sheet: the
+// channel's own sheet is the reference, and the writing pass no longer re-declares it.
+function withMascot(p: Production): Sheet[] {
+  const sheets = p.sheets ?? [];
+  return sheets.some((s) => s.kind === "mascot") ? sheets : [{ id: "mascot", kind: "mascot", handle: "@YOU", lock: "", prompt: "" } as Sheet, ...sheets];
 }
 
 // Out of the way, not deleted: a redo keeps the old file beside the new one under another name.
@@ -28,6 +35,8 @@ export function planSheets(root: string, dir: string, p: Production, ids: string
   const jobs: SceneParams[] = [];
   for (const s of sheets) {
     const out = join(s.kind === "mascot" ? channelDir(root) : dir, "sheets");
+    // The user's own mascot picture is final: it is never redrawn, even on a redo.
+    if (s.kind === "mascot" && sheetFile(OWN_CHANNEL_DIR, s.id)) continue;
     const have = sheetPath(root, dir, s);
     if (have && !redo) continue;
     if (redo) setAside(sheetFile(s.kind === "mascot" ? channelDir(root) : dir, s.id));
@@ -56,7 +65,7 @@ export function planStills(root: string, dir: string, p: Production, only: numbe
   if (!beats.length) throw new Error(only ? "Those stills already exist. Pass redo: true to draw them again." : "Every beat already has its still.");
   const missing = beats.filter((b) => !b.still_prompt).map((b) => b.n);
   if (missing.length) throw new Error(`Beat(s) ${missing.join(", ")} have no still prompt yet (STATE 5).`);
-  const sheets = (p.sheets ?? []).map((s) => ({ s, file: sheetPath(root, dir, s) })).filter((x) => x.file);
+  const sheets = withMascot(p).map((s) => ({ s, file: sheetPath(root, dir, s) })).filter((x) => x.file);
   const out = join(dir, "stills");
   mkdirSync(out, { recursive: true });
   if (redo) for (const b of beats) setAside(stillFile(dir, b.n));
@@ -141,7 +150,7 @@ export function planClips(dir: string, p: Production, only: number[] | undefined
 export function planThumbnails(root: string, dir: string, p: Production, only: number[] | undefined, redo: boolean): SceneParams[] {
   const thumbs = (p.thumbnails ?? []).filter((t) => !only || only.includes(t.n));
   if (!thumbs.length) throw new Error("This video has no thumbnail prompts yet (STATE 7).");
-  const sheets = (p.sheets ?? []).map((s) => ({ s, file: sheetPath(root, dir, s) })).filter((x) => x.file);
+  const sheets = withMascot(p).map((s) => ({ s, file: sheetPath(root, dir, s) })).filter((x) => x.file);
   const out = join(dir, "thumbs");
   mkdirSync(out, { recursive: true });
   const jobs: SceneParams[] = [];

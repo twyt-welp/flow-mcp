@@ -66,9 +66,10 @@ engine's grid and variety rules for the rest). Save them with `flow_production` 
 plus `ledger` and `contrasts`. Each extension re-saves the whole script.
 
 **STATE 3 — Cast & base (free).** Write the blocks exactly as engine.md says, then save them as `sheets`:
-- `{ id: "mascot", kind: "mascot", handle: "@YOU", lock: <MASCOT LOCK>, prompt: <the mascot sheet prompt> }`. The
-  mascot sheet is drawn once for the whole channel and reused forever; only include it if `flow_production` shows no
-  `mascot` in `files.sheets`.
+- The mascot sheet is the channel's own picture (flow-mcp's `channel/sheets/mascot.jpg`) and is final: never write or
+  draw a new one, and never redo it. It is attached to every still and thumbnail by itself. Still save
+  `{ id: "mascot", kind: "mascot", handle: "@YOU", lock: <MASCOT LOCK>, prompt: "the channel's saved mascot sheet" }` so
+  Studio lists it, and paste the MASCOT LOCK from engine.md word for word into every prompt that shows @YOU.
 - each supporting character: `{ id: "sister", kind: "character", handle: "@SISTER", lock, prompt }`
 - `{ id: "threat", kind: "threat", lock, prompt }` and `{ id: "base", kind: "base", lock: <all four versions>, prompt }`
 

@@ -1,5 +1,6 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 
 // One video of the C5 Reborn engine lives in one folder, and production.json in it is the single record of where that
@@ -74,6 +75,28 @@ export const sub = (dir: string, ...parts: string[]) => join(dir, ...parts);
 export const stillFile = (dir: string, n: number) => firstExisting(join(dir, "stills"), `scene-${pad(n)}`, /\.(png|jpe?g|webp)$/i);
 export const clipFile = (dir: string, n: number) => firstExisting(join(dir, "clips"), `scene-${pad(n)}`, /\.(mp4|mov|webm)$/i);
 export const sheetFile = (dir: string, id: string) => firstExisting(join(dir, "sheets"), id, /\.(png|jpe?g|webp)$/i);
+// The channel's own mascot sheet, kept with the code in <flow-mcp>/channel/sheets/mascot.(png|jpg|webp) (the user's
+// picture, 2026-10-27; not in git). Every video's folder sits in the output root, beside _channel, so a video finds the
+// mascot in its own sheets, then the channel's, then this one, which is copied into _channel/sheets on first use so the
+// panel (it only serves the output folder) can show it.
+export const OWN_CHANNEL_DIR = fileURLToPath(new URL("../channel/", import.meta.url));
+
+export function mascotSheet(dir: string): string | undefined {
+  const channel = join(dirname(dir), "_channel");
+  const found = sheetFile(dir, "mascot") ?? sheetFile(channel, "mascot");
+  if (found) return found;
+  const own = sheetFile(OWN_CHANNEL_DIR, "mascot");
+  if (!own) return undefined;
+  try {
+    mkdirSync(join(channel, "sheets"), { recursive: true });
+    const copy = join(channel, "sheets", basename(own));
+    copyFileSync(own, copy);
+    return copy;
+  } catch {
+    return own;
+  }
+}
+
 export const thumbFile = (dir: string, n: number) => firstExisting(join(dir, "thumbs"), `thumb-${n}`, /\.(png|jpe?g|webp)$/i);
 
 // Flow names a second take "-v2"; the first take is the one used.
@@ -117,7 +140,7 @@ export function progress(dir: string, p: Production) {
   const sheets = p.sheets ?? [];
   const timing = join(dir, "voice", "timing.json");
   return {
-    sheets: { total: sheets.length, done: sheets.filter((s) => sheetFile(dir, s.id)).map((s) => s.id) },
+    sheets: { total: sheets.length, done: sheets.filter((s) => (s.kind === "mascot" ? mascotSheet(dir) : sheetFile(dir, s.id))).map((s) => s.id) },
     stills: { total: beats.length, missing: beats.filter((b) => !stillFile(dir, b.n)).map((b) => b.n) },
     clips: { total: heroes.length, missing: heroes.filter((b) => !clipFile(dir, b.n)).map((b) => b.n) },
     voice: existsSync(timing) ? (JSON.parse(readFileSync(timing, "utf8")) as { total: number; file: string; voice?: string }) : null,
