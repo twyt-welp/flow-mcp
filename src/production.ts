@@ -1,5 +1,5 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 
@@ -77,20 +77,23 @@ export const clipFile = (dir: string, n: number) => firstExisting(join(dir, "cli
 export const sheetFile = (dir: string, id: string) => firstExisting(join(dir, "sheets"), id, /\.(png|jpe?g|webp)$/i);
 // The channel's own mascot sheet, kept with the code in <flow-mcp>/channel/sheets/mascot.(png|jpg|webp) (the user's
 // picture, 2026-10-27; not in git). Every video's folder sits in the output root, beside _channel, so a video finds the
-// mascot in its own sheets, then the channel's, then this one, which is copied into _channel/sheets on first use so the
-// panel (it only serves the output folder) can show it.
+// mascot here first (it beats any mascot drawn earlier); it is copied into _channel/sheets so the panel (which only
+// serves the output folder) can show it. Without it, the video's own sheet, then the channel's, as before.
 export const OWN_CHANNEL_DIR = fileURLToPath(new URL("../channel/", import.meta.url));
 
 export function mascotSheet(dir: string): string | undefined {
   const channel = join(dirname(dir), "_channel");
-  const found = sheetFile(dir, "mascot") ?? sheetFile(channel, "mascot");
-  if (found) return found;
   const own = sheetFile(OWN_CHANNEL_DIR, "mascot");
-  if (!own) return undefined;
+  // The user's own picture beats any mascot drawn earlier into a video or the channel folder.
+  if (!own) return sheetFile(dir, "mascot") ?? sheetFile(channel, "mascot");
   try {
-    mkdirSync(join(channel, "sheets"), { recursive: true });
-    const copy = join(channel, "sheets", basename(own));
-    copyFileSync(own, copy);
+    const copy = join(channel, "sheets", `mascot${extname(own)}`);
+    const old = sheetFile(channel, "mascot");
+    if (old && old !== copy) renameSync(old, old.replace(/(\.\w+)$/, `-old$1`));
+    if (!existsSync(copy) || statSync(copy).size !== statSync(own).size) {
+      mkdirSync(join(channel, "sheets"), { recursive: true });
+      copyFileSync(own, copy);
+    }
     return copy;
   } catch {
     return own;
