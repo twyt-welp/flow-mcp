@@ -5,6 +5,7 @@ import { speakLocally } from "./assemble.js";
 import { transcribe } from "./captions.js";
 import { speakWithElevenLabs, type SpokenWord } from "./elevenlabs.js";
 import { speakWithGemini } from "./gemini.js";
+import { speakWithOpenVoice } from "./openvoice.js";
 import { pad, type Production } from "./production.js";
 
 // About three minutes of speech per take: long enough that a whole video is four or five requests (the free AI Studio
@@ -101,12 +102,13 @@ function takes(chapters: { marker: string; text: string }[]): Take[] {
   return out;
 }
 
-export type VoiceEngine = "elevenlabs" | "gemini" | "mac";
+export type VoiceEngine = "elevenlabs" | "openvoice" | "gemini" | "mac";
 
 async function speak(engine: VoiceEngine, text: string, voice: string, target: string, style?: string): Promise<{ duration: number; words?: SpokenWord[] }> {
   for (let attempt = 0; ; attempt++) {
     try {
       if (engine === "elevenlabs") return await speakWithElevenLabs(text, voice, target);
+      if (engine === "openvoice") return await speakWithOpenVoice(text, target);
       return engine === "mac" ? await speakLocally(text, voice, target) : await speakWithGemini(text, voice, target, style);
     } catch (err) {
       // The free tier answers 429 when requests come too quickly: wait it out a few times rather than fail the video.

@@ -539,3 +539,9 @@ The preview tool could not read the project while it lived in ~/Desktop; check t
   ~/.flow-mcp/elevenlabs-key (panel only, set_key service "elevenlabs"; a TTS-only key is accepted when /v1/user answers
   401 missing_permissions), channel voice ID in `channel/elevenlabs-voice.txt` (gitignored, beside the mascot).
   flow_voiceover defaults to ElevenLabs once a key is saved. Tested with a stubbed API only; no real ElevenLabs call yet.
+- OPENVOICE (2026-10-27, Tanya's own cloned voice, free on their RTX 4070 Ti): engine "openvoice" runs
+  `scripts/openvoice_say.py` (MeloTTS EN_NEWEST base voice -> OpenVoice V2 ToneColorConverter) once per take through
+  the Python in `<studio>/openvoice/.venv` with the checkout at `<studio>/openvoice/OpenVoice` (checkpoints_v2 inside),
+  overridable in `channel/openvoice.json`. Reference = `channel/voice-reference.wav` (Tanya's 8.6 min recording; the
+  whole file feeds the VAD segments), speaker embedding cached as `channel/openvoice-se.pth`. No word times, so beats
+  fall back to the voice's pauses. Plumbing tested with a fake Python; the real model has not run yet.

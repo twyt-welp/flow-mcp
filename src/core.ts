@@ -5,6 +5,7 @@ import { z } from "zod";
 import { assemble, localVoices, speakLocally, voiceTrack } from "./assemble.js";
 import { elevenKey, elevenVoice, saveElevenKey, saveElevenVoice, speakWithElevenLabs } from "./elevenlabs.js";
 import { GEMINI_VOICES, geminiKey, saveGeminiKey, speakWithGemini } from "./gemini.js";
+import { openVoiceReady, speakWithOpenVoice } from "./openvoice.js";
 import { extractLastFrame } from "./chain.js";
 import { burnCaptions, captionedName, captionSetup, previewCaptions, transcribe } from "./captions.js";
 import { characterLook, createCharacter, downloadAsset, trashAsset, editCharacter, getFlowState, listAssets, listCharacters, rememberCharacter, runAgentBatch, runContinue, runEdit, runGeneration } from "./flow.js";
@@ -184,10 +185,10 @@ export const shapes = {
   narrate: {
     project: z.string().min(1).describe("Folder for the narration audio."),
     engine: z
-      .enum(["elevenlabs", "gemini", "mac"])
+      .enum(["elevenlabs", "openvoice", "gemini", "mac"])
       .default("gemini")
       .describe(
-        "'elevenlabs' uses the channel's own ElevenLabs voice (key and voice ID saved in Flow Studio's Voice step; voice = the voice ID, default the saved one). 'gemini' uses Google AI Studio's text-to-speech - the same voices Flow has, free on the AI Studio tier, no length limit, needs a key in ~/.flow-mcp/gemini-key. 'mac' uses a voice installed on this computer (macOS voices on a Mac, the built-in speech voices on Windows): free, instant, no key.",
+        "'openvoice' speaks in the user's own cloned voice (OpenVoice V2 on this computer, free; voice is ignored). 'elevenlabs' uses the channel's own ElevenLabs voice (key and voice ID saved in Flow Studio's Voice step; voice = the voice ID, default the saved one). 'gemini' uses Google AI Studio's text-to-speech - the same voices Flow has, free on the AI Studio tier, no length limit, needs a key in ~/.flow-mcp/gemini-key. 'mac' uses a voice installed on this computer (macOS voices on a Mac, the built-in speech voices on Windows): free, instant, no key.",
       ),
     text: z.string().min(1).max(400).describe("The line to speak. About 20 words fits 8 s, 30 words fits 12 s; anything longer needs a longer take."),
     voice: z.string().min(1).default("Charon").describe("Voice name from flow_voices, e.g. Charon (informative), Aoede (breezy), Gacrux (mature) for Google; Zoe or Samantha for macOS."),
@@ -312,9 +313,9 @@ export const shapes = {
   voiceover: {
     video: z.string().min(1),
     engine: z
-      .enum(["elevenlabs", "gemini", "mac"])
+      .enum(["elevenlabs", "openvoice", "gemini", "mac"])
       .optional()
-      .describe("Default: 'elevenlabs' once an ElevenLabs key is saved, else 'gemini'."),
+      .describe("'openvoice' = the user's own cloned voice (free, on this computer). Default: 'elevenlabs' once an ElevenLabs key is saved, else 'gemini'."),
     voice: z.string().optional().describe("ElevenLabs: a voice ID (default: the channel's saved voice). Google: a voice name (default: the video's saved voice, else Charon)."),
     style: z.string().max(200).optional().describe("Delivery note, e.g. 'calm, low and tense, like a survival story told at night'."),
   },
@@ -751,7 +752,7 @@ export class LocalCore implements Core {
   async voices() {
     // The panel words itself from these, so a PC never reads "this Mac".
     const place = { computer: COMPUTER, bin: BIN, local_engine: IS_MAC ? "macOS voice" : IS_WIN ? "Windows voice" : "System voice", platform: process.platform };
-    return { gemini: GEMINI_VOICES, gemini_ready: Boolean(geminiKey()), elevenlabs_ready: Boolean(elevenKey()), elevenlabs_voice: elevenVoice() ?? null, mac: await localVoices(), place };
+    return { gemini: GEMINI_VOICES, gemini_ready: Boolean(geminiKey()), elevenlabs_ready: Boolean(elevenKey()), elevenlabs_voice: elevenVoice() ?? null, openvoice: openVoiceReady(), mac: await localVoices(), place };
   }
 
   async narrate({ project, text, voice, engine, style }: Args<"narrate">) {
@@ -759,7 +760,9 @@ export class LocalCore implements Core {
     mkdirSync(output_dir, { recursive: true });
     const target = join(output_dir, `${this.nextStem(output_dir, "narration")}.wav`);
     const spoken =
-      engine === "elevenlabs"
+      engine === "openvoice"
+        ? await speakWithOpenVoice(text.trim(), target)
+        : engine === "elevenlabs"
         ? await speakWithElevenLabs(text.trim(), voice === "Charon" ? (elevenVoice() ?? voice) : voice, target).then(({ words, ...r }) => r)
         : engine === "mac"
           ? await speakLocally(text.trim(), voice, target)
@@ -820,6 +823,10 @@ export class LocalCore implements Core {
       const id = voice ?? elevenVoice();
       if (!id) throw new Error("No ElevenLabs voice yet: paste your voice ID in Flow Studio's Voice step (ElevenLabs: Voices -> My Voices -> Copy voice ID).");
       const timing = await recordVoiceover(dir, p, { engine: eng, voice: id });
+      return { file: timing.file, seconds: timing.total, aligned: timing.aligned, chapters: timing.chapters, beats: timing.beats.length, engine: eng, credits: 0 };
+    }
+    if (eng === "openvoice") {
+      const timing = await recordVoiceover(dir, p, { engine: eng, voice: "my voice" });
       return { file: timing.file, seconds: timing.total, aligned: timing.aligned, chapters: timing.chapters, beats: timing.beats.length, engine: eng, credits: 0 };
     }
     const v = voice ?? p.settings?.voice ?? "Charon";

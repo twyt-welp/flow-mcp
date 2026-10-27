@@ -33,7 +33,9 @@ Each queues jobs: `flow_wait` until they finish (it answers within a minute; cal
    cap is skipped at no cost: say which. A clip made but not downloaded is already in Flow: `flow_download` it, never
    generate it again. `flow_retry` for a failed job. If a paid job vanishes from the queue, look at the grid
    (`flow_assets`) before running anything again.
-4. **Voiceover.** `flow_voices`. If `elevenlabs_ready` is true and `elevenlabs_voice` is set, call `flow_voiceover`
+4. **Voiceover.** `flow_voices`. If the user wants their own voice ("my voice", "my cloned voice") and `openvoice.ready`
+   is true, call `flow_voiceover` with `video` and `engine: "openvoice"` (free, on their computer; beats are timed from
+   the voice's pauses). Otherwise, if `elevenlabs_ready` is true and `elevenlabs_voice` is set, call `flow_voiceover`
    with just `video`: it uses the channel's ElevenLabs voice and times every beat from the words it reports (this uses
    the user's ElevenLabs characters, roughly one per letter of the script, no Flow credits). If no ElevenLabs key or
    voice is saved, tell the user to paste them in Flow Studio, step 5 Voice ("ElevenLabs key", "Voice ID", Save) and
