@@ -1,6 +1,6 @@
 ---
 name: c5-flow-run
-description: Send a C5 video's saved prompts to Google Flow and finish it - character sheets, stills, paid hero clips under a credit cap, the Google voiceover, the CapCut timeline written into the project files, and thumbnails. Built for a cheaper model; it never writes prompts. Use when the user says "run C5 in Flow", "send my prompts to Flow", "draw the stills", "make the clips", "redo still N", "record the voiceover", "open Flow Studio", or asks to edit, sync or build a CapCut project ("edit my CapCut project - [project name]", "build the timeline by writing the project files").
+description: Send a C5 video's saved prompts to Google Flow and finish it - character sheets, stills, paid hero clips under a credit cap, the voiceover (ElevenLabs, or Google), the CapCut timeline written into the project files, and thumbnails. Built for a cheaper model; it never writes prompts. Use when the user says "run C5 in Flow", "send my prompts to Flow", "draw the stills", "make the clips", "redo still N", "record the voiceover", "open Flow Studio", or asks to edit, sync or build a CapCut project ("edit my CapCut project - [project name]", "build the timeline by writing the project files").
 ---
 
 # C5 in Flow: send the saved prompts
@@ -33,10 +33,13 @@ Each queues jobs: `flow_wait` until they finish (it answers within a minute; cal
    cap is skipped at no cost: say which. A clip made but not downloaded is already in Flow: `flow_download` it, never
    generate it again. `flow_retry` for a failed job. If a paid job vanishes from the queue, look at the grid
    (`flow_assets`) before running anything again.
-4. **Voiceover (free).** `flow_voices`. Use `settings.voice` if saved; otherwise record two short samples of the cold
-   open with `flow_narrate` in two fitting Google voices and let the user pick. `flow_voiceover` with the voice and a
-   style note of a few words ("calm, low and tense"). Report the runtime. If the key is missing, tell the user to paste
-   it in Flow Studio, step 5 Voice, "Google AI Studio key" - never in chat.
+4. **Voiceover.** `flow_voices`. If `elevenlabs_ready` is true and `elevenlabs_voice` is set, call `flow_voiceover`
+   with just `video`: it uses the channel's ElevenLabs voice and times every beat from the words it reports (this uses
+   the user's ElevenLabs characters, roughly one per letter of the script, no Flow credits). If no ElevenLabs key or
+   voice is saved, tell the user to paste them in Flow Studio, step 5 Voice ("ElevenLabs key", "Voice ID", Save) and
+   wait; never ask for the key in chat. Only if the user asks for the free Google voice instead: `flow_voiceover` with
+   `engine: "gemini"`, the voice (`settings.voice`, or two short `flow_narrate` samples to choose from) and a style note
+   of a few words. Report the runtime.
 5. **CapCut (free).** If the user already asked for the edit in their own words, that request is this step: go straight
    to the build with that project name. Otherwise tell them: 1. open CapCut and make a new project named after the
    video, 2. import the `stills` and `clips` folders and `voice/narration.wav` (optional), 3. close CapCut completely,

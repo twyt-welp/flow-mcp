@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { z } from "zod";
 import { assemble, localVoices, speakLocally, voiceTrack } from "./assemble.js";
+import { elevenKey, elevenVoice, saveElevenKey, saveElevenVoice, speakWithElevenLabs } from "./elevenlabs.js";
 import { GEMINI_VOICES, geminiKey, saveGeminiKey, speakWithGemini } from "./gemini.js";
 import { extractLastFrame } from "./chain.js";
 import { burnCaptions, captionedName, captionSetup, previewCaptions, transcribe } from "./captions.js";
@@ -183,10 +184,10 @@ export const shapes = {
   narrate: {
     project: z.string().min(1).describe("Folder for the narration audio."),
     engine: z
-      .enum(["gemini", "mac"])
+      .enum(["elevenlabs", "gemini", "mac"])
       .default("gemini")
       .describe(
-        "'gemini' uses Google AI Studio's text-to-speech - the same voices Flow has, free on the AI Studio tier, no length limit, needs a key in ~/.flow-mcp/gemini-key. 'mac' uses a voice installed on this computer (macOS voices on a Mac, the built-in speech voices on Windows): free, instant, no key.",
+        "'elevenlabs' uses the channel's own ElevenLabs voice (key and voice ID saved in Flow Studio's Voice step; voice = the voice ID, default the saved one). 'gemini' uses Google AI Studio's text-to-speech - the same voices Flow has, free on the AI Studio tier, no length limit, needs a key in ~/.flow-mcp/gemini-key. 'mac' uses a voice installed on this computer (macOS voices on a Mac, the built-in speech voices on Windows): free, instant, no key.",
       ),
     text: z.string().min(1).max(400).describe("The line to speak. About 20 words fits 8 s, 30 words fits 12 s; anything longer needs a longer take."),
     voice: z.string().min(1).default("Charon").describe("Voice name from flow_voices, e.g. Charon (informative), Aoede (breezy), Gacrux (mature) for Google; Zoe or Samantha for macOS."),
@@ -227,7 +228,11 @@ export const shapes = {
       .describe("Skip the guard that refuses to run when Flow already holds a fresh-looking continuation of this clip. Only pass it when you have checked the grid and genuinely want another paid take."),
   },
   trash: { name: z.string().min(1).describe("Exact title of the item to move to Flow's Trash, as listed by flow_assets.") },
-  set_key: { key: z.string().min(1).max(200) },
+  set_key: {
+    service: z.enum(["gemini", "elevenlabs"]).default("gemini"),
+    key: z.string().max(200).optional(),
+    voice_id: z.string().max(60).optional().describe("ElevenLabs only: the channel's voice ID."),
+  },
   discard: { path: z.string().min(1).describe("A saved film, still, narration or whole project folder inside the films folder, to move to this computer's bin (Mac Trash, Windows Recycle Bin).") },
   outputs: {},
   characters: {},
@@ -306,8 +311,11 @@ export const shapes = {
   },
   voiceover: {
     video: z.string().min(1),
-    engine: z.enum(["gemini", "mac"]).default("gemini"),
-    voice: z.string().optional().describe("Google voice name (default: the video's saved voice, else Charon)."),
+    engine: z
+      .enum(["elevenlabs", "gemini", "mac"])
+      .optional()
+      .describe("Default: 'elevenlabs' once an ElevenLabs key is saved, else 'gemini'."),
+    voice: z.string().optional().describe("ElevenLabs: a voice ID (default: the channel's saved voice). Google: a voice name (default: the video's saved voice, else Charon)."),
     style: z.string().max(200).optional().describe("Delivery note, e.g. 'calm, low and tense, like a survival story told at night'."),
   },
   capcut_projects: {},
@@ -730,21 +738,32 @@ export class LocalCore implements Core {
   }
 
   // Panel only: deliberately NOT registered as an MCP tool, so a key typed into Flow Studio never reaches Claude.
-  async set_key({ key }: Args<"set_key">) {
-    return saveGeminiKey(key);
+  async set_key({ service, key, voice_id }: Args<"set_key">) {
+    if (service === "gemini") {
+      if (!key) throw new Error("Paste the key first.");
+      return saveGeminiKey(key);
+    }
+    if (!key && !voice_id) throw new Error("Paste the key or the voice ID first.");
+    const saved = key ? await saveElevenKey(key) : {};
+    return { ...saved, ...(voice_id ? saveElevenVoice(voice_id) : {}) };
   }
 
   async voices() {
     // The panel words itself from these, so a PC never reads "this Mac".
     const place = { computer: COMPUTER, bin: BIN, local_engine: IS_MAC ? "macOS voice" : IS_WIN ? "Windows voice" : "System voice", platform: process.platform };
-    return { gemini: GEMINI_VOICES, gemini_ready: Boolean(geminiKey()), mac: await localVoices(), place };
+    return { gemini: GEMINI_VOICES, gemini_ready: Boolean(geminiKey()), elevenlabs_ready: Boolean(elevenKey()), elevenlabs_voice: elevenVoice() ?? null, mac: await localVoices(), place };
   }
 
   async narrate({ project, text, voice, engine, style }: Args<"narrate">) {
     const output_dir = projectDir(project);
     mkdirSync(output_dir, { recursive: true });
     const target = join(output_dir, `${this.nextStem(output_dir, "narration")}.wav`);
-    const spoken = engine === "mac" ? await speakLocally(text.trim(), voice, target) : await speakWithGemini(text.trim(), voice, target, style);
+    const spoken =
+      engine === "elevenlabs"
+        ? await speakWithElevenLabs(text.trim(), voice === "Charon" ? (elevenVoice() ?? voice) : voice, target).then(({ words, ...r }) => r)
+        : engine === "mac"
+          ? await speakLocally(text.trim(), voice, target)
+          : await speakWithGemini(text.trim(), voice, target, style);
     return { output_dir, credits: 0, engine, voice, ...spoken };
   }
 
@@ -795,9 +814,16 @@ export class LocalCore implements Core {
   async voiceover({ video, engine, voice, style }: Args<"voiceover">) {
     const dir = projectDir(video);
     const p = readProduction(dir, video);
-    const v = voice ?? p.settings?.voice ?? "Charon";
+    const eng = engine ?? (elevenKey() ? "elevenlabs" : "gemini");
     const st = style ?? p.settings?.style;
-    const timing = await recordVoiceover(dir, p, { engine, voice: v, style: st });
+    if (eng === "elevenlabs") {
+      const id = voice ?? elevenVoice();
+      if (!id) throw new Error("No ElevenLabs voice yet: paste your voice ID in Flow Studio's Voice step (ElevenLabs: Voices -> My Voices -> Copy voice ID).");
+      const timing = await recordVoiceover(dir, p, { engine: eng, voice: id });
+      return { file: timing.file, seconds: timing.total, aligned: timing.aligned, chapters: timing.chapters, beats: timing.beats.length, engine: eng, credits: 0 };
+    }
+    const v = voice ?? p.settings?.voice ?? "Charon";
+    const timing = await recordVoiceover(dir, p, { engine: eng, voice: v, style: st });
     writeProduction(dir, video, { settings: { voice: v, style: st } });
     return { file: timing.file, seconds: timing.total, aligned: timing.aligned, chapters: timing.chapters, beats: timing.beats.length, credits: 0 };
   }

@@ -532,3 +532,10 @@ The preview tool could not read the project while it lived in ~/Desktop; check t
   `<output>/_channel/sheets/` so the panel can show it; withMascot() attaches it to every still and thumbnail even when
   a record lists no mascot sheet, and planSheets never redraws it, redo or not. engine.md's MASCOT LOCK was rewritten
   to match the sheet (messy brown hair, full sleeves, off-white hands, flap backpack).
+- ELEVENLABS VOICEOVER (2026-10-27, Tanya's choice over Google): `src/elevenlabs.ts` calls
+  `/v1/text-to-speech/<voice>/with-timestamps?output_format=pcm_24000` (model eleven_multilingual_v2, raw PCM -> WAV in
+  JS, no FFmpeg). The reply times every character, so each take's words are saved as take-NN.words.json and beats are
+  cut at the midpoint between two spoken words (aligned "voice"); whisper/pauses remain the Google fallback. Key in
+  ~/.flow-mcp/elevenlabs-key (panel only, set_key service "elevenlabs"; a TTS-only key is accepted when /v1/user answers
+  401 missing_permissions), channel voice ID in `channel/elevenlabs-voice.txt` (gitignored, beside the mascot).
+  flow_voiceover defaults to ElevenLabs once a key is saved. Tested with a stubbed API only; no real ElevenLabs call yet.

@@ -61,7 +61,7 @@ Keep every HARD STOP and closing line from engine.md. The user approves in chat 
 engine's grid and variety rules for the rest). Save them with `flow_production` as `topics` (`n`, `title`, `hook`) and
 `state: "ideas"`. When the user picks, save `picked` and a working `title`.
 
-**STATE 2 — Script.** Unchanged, except the voice is Google's, not ElevenLabs. Save the script as `script.chapters`
+**STATE 2 — Script.** Unchanged; the voice is the user's ElevenLabs voice. Save the script as `script.chapters`
 (one entry per chapter: `marker` exactly as written, `flashback`, and the chapter's narration paragraph as `text`),
 plus `ledger` and `contrasts`. Each extension re-saves the whole script.
 
@@ -108,11 +108,11 @@ Skip the AGENT INSTRUCTION BLOCK: these tools are the agent. Then:
   never generate it again. Use `flow_retry` for failed jobs.
 - End with "Type 'next' for your voiceover."
 
-**NEW STATE 6b — Voiceover (free).** `flow_voices`. The first time for this channel (no `settings.voice` saved on any
-earlier video), record two short samples of the cold open with `flow_narrate` in two fitting Google voices and let the
-user pick. Then `flow_voiceover` with the chosen voice and a style note such as "calm, low and tense, like a survival
-story told at night". Report the runtime against the engine's target, then end with
-"Type 'next' to set up CapCut."
+**NEW STATE 6b — Voiceover.** The channel's voice is the user's own ElevenLabs voice, saved in Flow Studio's Voice
+step with their key. `flow_voices`: if `elevenlabs_ready` and `elevenlabs_voice` are set, `flow_voiceover` with just
+`video`; otherwise ask the user to paste the key and voice ID into Flow Studio (never into chat) and wait. Use the free
+Google voice (`engine: "gemini"`, a voice and a short style note) only if the user asks for it. Report the runtime against
+the engine's target, then end with "Type 'next' to set up CapCut."
 
 **NEW STATE 6c — CapCut (free).** If the user already asked for the edit in their own words (for example "I want you
 to edit my CapCut project - <name>. Sync the images, videos to the voice over. Also add sound effects, add music, and
@@ -166,5 +166,5 @@ if there is no voiceover). Save `branding` (`titles`, `description`, `hashtags`,
   rough time estimate when queueing many jobs and don't apologise for the pace.
 - If Flow silently blocks a prompt, soften the wording with the audio-safe swaps and retry once, then tell the user
   which beat needs a manual look.
-- Tell the user file paths in plain words. Never paste the Google AI Studio key into chat: it is saved in Flow Studio's
+- Tell the user file paths in plain words. Never paste the ElevenLabs or Google key into chat: it is saved in Flow Studio's
   Voice tab.

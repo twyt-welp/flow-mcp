@@ -408,7 +408,7 @@ h1 span{margin-left:-.25em}
     <button data-tab="p_cast">2 · Cast<small>sheets · free</small></button>
     <button data-tab="p_stills">3 · Stills<small>key frames · free</small></button>
     <button data-tab="p_clips">4 · Hero clips<small>credits</small></button>
-    <button data-tab="p_voice">5 · Voice<small>Google · free</small></button>
+    <button data-tab="p_voice">5 · Voice<small>ElevenLabs</small></button>
     <button data-tab="p_capcut">6 · CapCut<small>timeline</small></button>
     <button data-tab="p_brand">7 · Branding<small>thumbs &amp; titles</small></button>
     <button type="button" id="moreTools" class="more">More tools<small>classic panels</small></button>
@@ -476,9 +476,22 @@ h1 span{margin-left:-.25em}
 
       <section class="panel" data-panel="p_voice">
         <div class="step">Step 5</div>
-        <h2>Voiceover <small>Google · free</small></h2>
-        <p class="lede">The whole script read in one Google voice, in a few long takes, then every beat is timed against it. That timing is what the CapCut edit is cut to. Changing a chapter re-records only its take.</p>
+        <h2>Voiceover <small>ElevenLabs or Google</small></h2>
+        <p class="lede">The whole script read in your ElevenLabs voice (or a free Google voice), in a few long takes, then every beat is timed against it. That timing is what the CapCut edit is cut to. Changing a chapter re-records only its take.</p>
         <div class="card">
+          <label class="f" for="vo_engine">Voice service</label>
+          <select id="vo_engine"><option value="elevenlabs">ElevenLabs (your voice)</option><option value="gemini">Google AI Studio (free)</option></select>
+          <div id="vo_el" style="margin-top:12px">
+            <div id="vo_elKeyWrap">
+              <label class="f" for="vo_elkey">ElevenLabs key</label>
+              <input type="password" id="vo_elkey" autocomplete="off" spellcheck="false" placeholder="Paste your key">
+              <p class="empty" style="margin-top:6px">Checked with ElevenLabs and saved only on <span data-place="computer">this computer</span>. Never paste it into a chat.</p>
+            </div>
+            <label class="f" for="vo_elvoice">Voice ID</label>
+            <div class="rowbtns" style="margin-top:0;flex-wrap:nowrap"><input type="text" id="vo_elvoice" autocomplete="off" spellcheck="false" placeholder="e.g. 21m00Tcm4TlvDq8ikWAM" style="flex:1;min-width:0"><button type="button" class="btn small" id="vo_elsave">Save</button></div>
+            <p class="empty" id="vo_elstate" style="margin-top:6px"></p>
+          </div>
+          <div id="vo_g">
           <div class="grid2">
             <div><label class="f" for="vo_voice">Voice</label><select id="vo_voice"></select></div>
             <div><label class="f" for="vo_style">Delivery</label><input type="text" id="vo_style" placeholder="calm, low and tense, like a survival story told at night"></div>
@@ -487,6 +500,7 @@ h1 span{margin-left:-.25em}
             <label class="f" for="vo_key">Google AI Studio key</label>
             <div class="rowbtns" style="margin-top:0;flex-wrap:nowrap"><input type="password" id="vo_key" autocomplete="off" spellcheck="false" placeholder="Paste your key" style="flex:1;min-width:0"><button type="button" class="btn small" id="vo_keysave">Save key</button></div>
             <p class="empty" style="margin-top:6px">Checked with Google and saved only on <span data-place="computer">this computer</span>. Never paste it into a chat.</p>
+          </div>
           </div>
           <div class="rowbtns"><button class="btn" id="vo_go">Record voiceover</button></div>
           <p class="empty" id="vo_info" style="margin-top:10px"></p>
@@ -1585,8 +1599,8 @@ function stages(st) {
       d: beats.length ? `${stills} of ${beats.length} key frames` : "No beat map yet", next: `Draw ${beats.length - stills} still${beats.length - stills === 1 ? "" : "s"}` },
     { k: "p_clips", n: 4, name: "Hero clips", cost: "credits", pct: frac(clips, heroes.length),
       d: heroes.length ? `${clips} of ${heroes.length} ★ clips` : "No hero beats yet", next: `Animate ${heroes.length - clips} hero clip${heroes.length - clips === 1 ? "" : "s"}` },
-    { k: "p_voice", n: 5, name: "Voice", cost: "free", pct: pr?.voice ? 100 : 0,
-      d: pr?.voice ? `${mmss(pr.voice.total)} · ${pr.voice.voice ?? "Google voice"}` : ch.length ? `About ${Math.max(1, Math.round(words / 150))} min to record` : "Needs the script", next: "Record the voiceover" },
+    { k: "p_voice", n: 5, name: "Voice", cost: VOICES.elevenlabs_ready ? "ElevenLabs" : "free", pct: pr?.voice ? 100 : 0,
+      d: pr?.voice ? `${mmss(pr.voice.total)} · ${pr.voice.engine === "elevenlabs" ? "ElevenLabs voice" : pr.voice.voice ?? "Google voice"}` : ch.length ? `About ${Math.max(1, Math.round(words / 150))} min to record` : "Needs the script", next: "Record the voiceover" },
     { k: "p_capcut", n: 6, name: "CapCut", cost: "free", pct: p.settings?.capcut_project ? 100 : 0,
       d: p.settings?.capcut_project ? `Built into "${p.settings.capcut_project}"` : "Timeline not built", next: "Build the CapCut timeline" },
     { k: "p_brand", n: 7, name: "Branding", cost: "free", pct: Math.round((frac(thumbs, nThumbs) + (p.branding?.titles?.length ? 100 : 0)) / 2),
@@ -1623,7 +1637,7 @@ function renderHome(st = {}) {
         const file = f.clips[b.n] ?? f.stills[b.n];
         return `<div class="fr${file ? "" : " miss"}${b.hero ? " hero" : ""}${f.clips[b.n] ? " clip" : ""}" title="${esc(`${b.n}. ${b.text}`)}" ${file ? "" : `data-go="p_stills"`}><i>${b.n}${b.hero ? "★" : ""}</i>${file ? pic(file, `beat ${b.n}`) : "to draw"}</div>`;
       }).join("")}</div></div>`).join("")}</div></section>` : ""}
-      ${pr?.voice?.chapters?.length ? `<section><h2>Voice timeline <small>${mmss(pr.voice.total)} · ${esc(pr.voice.voice ?? "")}</small></h2><div class="tl">${pr.voice.chapters.map((c) => {
+      ${pr?.voice?.chapters?.length ? `<section><h2>Voice timeline <small>${mmss(pr.voice.total)} · ${esc(pr.voice.engine === "elevenlabs" ? "ElevenLabs voice" : pr.voice.voice ?? "")}</small></h2><div class="tl">${pr.voice.chapters.map((c) => {
         const flash = (p.script?.chapters ?? []).find((x) => x.marker === c.marker)?.flashback;
         return `<div class="${flash ? "fb" : ""}" style="flex:${Math.max(0.5, c.end - c.start)}" title="${esc(`${c.marker} · ${mmss(c.start)}–${mmss(c.end)}`)}"><b>${esc(c.marker)}</b><small>${mmss(c.start)}</small></div>`;
       }).join("")}</div></section>` : ""}
@@ -1730,15 +1744,32 @@ function voRender() {
   sel.innerHTML = (VOICES.gemini ?? []).map((v) => `<option value="${v.name}" ${v.name === cur ? "selected" : ""}>${v.name} · ${v.description}</option>`).join("");
   if (P().settings?.style && document.activeElement !== $("#vo_style")) $("#vo_style").value = P().settings.style;
   $("#vo_keyWrap").hidden = Boolean(VOICES.gemini_ready);
+  if (!$("#vo_engine").dataset.set) { $("#vo_engine").value = VOICES.elevenlabs_ready || !VOICES.gemini_ready ? "elevenlabs" : "gemini"; $("#vo_engine").dataset.set = "1"; }
+  const el = $("#vo_engine").value === "elevenlabs";
+  $("#vo_el").hidden = !el; $("#vo_g").hidden = el;
+  $("#vo_elKeyWrap").hidden = Boolean(VOICES.elevenlabs_ready);
+  if (document.activeElement !== $("#vo_elvoice") && !$("#vo_elvoice").value) $("#vo_elvoice").value = VOICES.elevenlabs_voice ?? "";
+  $("#vo_elstate").textContent = VOICES.elevenlabs_ready ? (VOICES.elevenlabs_voice ? "Key saved · voice saved. Ready to record." : "Key saved. Paste your voice ID and press Save.") : "Paste your key and voice ID, then press Save.";
   const v = PROD?.progress.voice;
   $("#vo_out").innerHTML = v
-    ? `<audio controls preload="metadata" src="${media(v.file)}"></audio><p class="empty" style="margin-top:6px">${Math.floor(v.total / 60)}:${String(Math.round(v.total % 60)).padStart(2, "0")} long · ${v.voice} · beats ${v.aligned === "words" ? "timed to the spoken words" : "timed by estimate (install whisper.cpp for word timing)"}</p>
+    ? `<audio controls preload="metadata" src="${media(v.file)}"></audio><p class="empty" style="margin-top:6px">${Math.floor(v.total / 60)}:${String(Math.round(v.total % 60)).padStart(2, "0")} long · ${v.engine === "elevenlabs" ? "ElevenLabs voice" : v.voice} · beats ${v.aligned === "voice" ? "timed to every spoken word" : v.aligned === "words" ? "timed to the spoken words" : "timed from the voice's pauses"}</p>
        <table class="timing">${(v.chapters ?? []).map((c) => `<tr><td>${esc(c.marker)}</td><td>${Math.floor(c.start / 60)}:${String(Math.round(c.start % 60)).padStart(2, "0")}</td></tr>`).join("")}</table>`
     : "";
 }
 $("#vo_keysave").onclick = async () => {
   if (!guard()) return;
-  try { const r = await api("set_key", { key: $("#vo_key").value }); $("#vo_key").value = ""; VOICES = await api("voices"); toast(`Key saved (ends ${r.ending}).`); voRender(); } catch (err) { toast(err.message, true); }
+  try { const r = await api("set_key", { service: "gemini", key: $("#vo_key").value }); $("#vo_key").value = ""; VOICES = await api("voices"); toast(`Key saved (ends ${r.ending}).`); voRender(); } catch (err) { toast(err.message, true); }
+};
+$("#vo_engine").onchange = () => voRender();
+$("#vo_elsave").onclick = async () => {
+  if (!guard()) return;
+  const key = $("#vo_elkey").value.trim(), voice_id = $("#vo_elvoice").value.trim();
+  try {
+    const r = await api("set_key", { service: "elevenlabs", key: key || undefined, voice_id: voice_id || undefined });
+    $("#vo_elkey").value = ""; VOICES = await api("voices");
+    toast([r.ending ? `Key saved (ends ${r.ending})` : "", r.voice_id ? "voice saved" : ""].filter(Boolean).join(", ") + ".");
+    voRender();
+  } catch (err) { toast(err.message, true); }
 };
 $("#vo_go").onclick = async () => {
   if (!guard() || !vid()) return;
@@ -1746,7 +1777,8 @@ $("#vo_go").onclick = async () => {
   const b = $("#vo_go"); b.disabled = true; b.textContent = "Recording…";
   $("#vo_info").textContent = "Recording the script in a few long takes. A full video takes a few minutes.";
   try {
-    const out = await api("voiceover", { video: vid(), voice: $("#vo_voice").value, style: $("#vo_style").value.trim() || undefined });
+    const el = $("#vo_engine").value === "elevenlabs";
+    const out = await api("voiceover", el ? { video: vid(), engine: "elevenlabs" } : { video: vid(), engine: "gemini", voice: $("#vo_voice").value, style: $("#vo_style").value.trim() || undefined });
     $("#vo_info").textContent = `Done: ${Math.round(out.seconds)} s, ${out.beats} beats timed.`;
     await c5Load(); voRender();
   } catch (err) { $("#vo_info").textContent = err.message; toast(err.message, true); }

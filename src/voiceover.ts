@@ -1,8 +1,9 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { joinTakes, pauses, readWav, writeWav } from "./audio.js";
 import { speakLocally } from "./assemble.js";
 import { transcribe } from "./captions.js";
+import { speakWithElevenLabs, type SpokenWord } from "./elevenlabs.js";
 import { speakWithGemini } from "./gemini.js";
 import { pad, type Production } from "./production.js";
 
@@ -17,7 +18,7 @@ export interface Timing {
   voice: string;
   engine: string;
   total: number;
-  aligned: "words" | "pauses" | "estimate";
+  aligned: "voice" | "words" | "pauses" | "estimate";
   chapters: { marker: string; start: number; end: number }[];
   beats: { n: number; chapter: string; start: number; end: number }[];
 }
@@ -100,13 +101,16 @@ function takes(chapters: { marker: string; text: string }[]): Take[] {
   return out;
 }
 
-async function speak(engine: "gemini" | "mac", text: string, voice: string, target: string, style?: string) {
+export type VoiceEngine = "elevenlabs" | "gemini" | "mac";
+
+async function speak(engine: VoiceEngine, text: string, voice: string, target: string, style?: string): Promise<{ duration: number; words?: SpokenWord[] }> {
   for (let attempt = 0; ; attempt++) {
     try {
+      if (engine === "elevenlabs") return await speakWithElevenLabs(text, voice, target);
       return engine === "mac" ? await speakLocally(text, voice, target) : await speakWithGemini(text, voice, target, style);
     } catch (err) {
       // The free tier answers 429 when requests come too quickly: wait it out a few times rather than fail the video.
-      if (attempt < 4 && /\(429\)|\(503\)|RESOURCE_EXHAUSTED|overloaded/i.test(String(err))) {
+      if (attempt < 4 && /\(429\)|\(503\)|RESOURCE_EXHAUSTED|overloaded|too_many_concurrent/i.test(String(err))) {
         await new Promise((r) => setTimeout(r, 35_000 * (attempt + 1)));
         continue;
       }
@@ -120,7 +124,7 @@ async function speak(engine: "gemini" | "mac", text: string, voice: string, targ
 export async function recordVoiceover(
   dir: string,
   p: Production,
-  o: { engine: "gemini" | "mac"; voice: string; style?: string },
+  o: { engine: VoiceEngine; voice: string; style?: string },
   onStep: (s: string) => void = () => {},
 ): Promise<Timing> {
   const chapters = p.script?.chapters ?? [];
@@ -132,10 +136,14 @@ export async function recordVoiceover(
   for (const [i, t] of parts.entries()) {
     const file = join(out, `take-${pad(i + 1)}.wav`);
     const meta = join(out, `take-${pad(i + 1)}.txt`);
+    const said = join(out, `take-${pad(i + 1)}.words.json`);
     const stamp = `${o.engine}|${o.voice}|${o.style ?? ""}\n${t.text}`;
     if (!(existsSync(file) && existsSync(meta) && readFileSync(meta, "utf8") === stamp)) {
       onStep(`recording take ${i + 1} of ${parts.length}`);
-      await speak(o.engine, t.text, o.voice, file, o.style);
+      const spoken = await speak(o.engine, t.text, o.voice, file, o.style);
+      // ElevenLabs says when each word is spoken: kept beside the take, it times the beats exactly.
+      if (spoken?.words?.length) writeFileSync(said, JSON.stringify(spoken.words));
+      else rmSync(said, { force: true });
       writeFileSync(meta, stamp);
     }
     files.push(file);
@@ -147,10 +155,10 @@ export async function recordVoiceover(
   writeWav(narration, joined);
   const total = joined.channels[0].length / joined.rate;
 
-  // Where each take's words fall. whisper.cpp gives real word times when it is installed; otherwise they are read
-  // from the voice's own pauses.
+  // Where each take's words fall: ElevenLabs reports them itself; otherwise whisper.cpp hears them when it is installed;
+  // otherwise they are read from the voice's own pauses.
   onStep("timing every beat against the voice");
-  let aligned: Timing["aligned"] = "words";
+  let aligned: Timing["aligned"] = "voice";
   const at: ((wordIndex: number) => number)[] = [];
   let offset = 0;
   for (const [i, file] of files.entries()) {
@@ -159,13 +167,21 @@ export async function recordVoiceover(
     const words = wordsOf(parts[i].text);
     const n = words.length;
     const base = offset;
+    const said = join(out, `take-${pad(i + 1)}.words.json`);
+    const exact: SpokenWord[] = existsSync(said) ? JSON.parse(readFileSync(said, "utf8")) : [];
     let heard: { start: number; end: number }[] = [];
-    try {
-      heard = (await transcribe(file, "en")).words;
-    } catch {
-      heard = [];
+    if (exact.length !== n) {
+      try {
+        heard = (await transcribe(file, "en")).words;
+      } catch {
+        heard = [];
+      }
     }
-    if (heard.length > n / 2) {
+    if (exact.length === n) {
+      // The voice's own word times: a boundary falls in the gap between the last word said and the next.
+      at.push((k) => (k <= 0 ? base : k >= n ? base + exact[n - 1].end : base + (exact[k - 1].end + exact[k].start) / 2));
+    } else if (heard.length > n / 2) {
+      if (aligned === "voice") aligned = "words";
       at.push((k) => (k <= 0 ? base : base + heard[Math.min(heard.length - 1, Math.max(0, Math.round((k * heard.length) / n) - 1))].end));
     } else {
       const time = fromPauses(file, words);
