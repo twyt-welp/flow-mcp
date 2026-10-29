@@ -6,7 +6,7 @@ description: Send a C5 video's saved prompts to Google Flow and finish it - char
 # C5 in Flow: send the saved prompts
 
 The prompts were written in the other pass (the `c5-reborn` skill, on a stronger model) and are saved in the video's
-record. This skill only sends them through the `flow` tools and reports results. Never write or change a prompt here:
+record. This skill only sends them through the `flow` tools and reports results. C5 uses only the `flow` connector (the C5 Google account); never the `flow-c3` connector, which is C3's. Never write or change a prompt here:
 when a result is wrong, tell the user to go back to the writing pass and say "rewrite still N" (or sheet, clip,
 thumbnail), then come back and say "redo still N". Keep replies short: what ran, what came out, file paths, what is next.
 

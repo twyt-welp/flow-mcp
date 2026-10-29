@@ -13,6 +13,8 @@ export interface FlowState {
   plan?: string;
   credits_remaining?: number;
   composer?: string;
+  // The signed-in Google account, read from the account panel (any email address shown there).
+  account?: string;
   hint?: string;
 }
 
@@ -34,7 +36,9 @@ export async function getFlowState(detailed = false): Promise<FlowState> {
   else if (!inProject) state.hint = "Signed in, but no project is open. Open or create a project in the Flow Chrome window.";
   else if (detailed) {
     state.plan = await page.getByRole("button", { name: "Account details" }).innerText().then((t) => t.trim().split("\n")[0], () => undefined);
-    state.credits_remaining = await readCredits(page).catch(() => undefined);
+    const panel = await readAccountPanel(page).catch(() => undefined);
+    state.credits_remaining = panel?.credits;
+    state.account = panel?.account;
     state.composer = await settingsTrigger(page).innerText().then((t) => t.replace(/\s+/g, " ").trim(), () => undefined);
   }
   return state;
@@ -87,7 +91,13 @@ async function closeAgentSettings(page: Page): Promise<void> {
 }
 
 // The balance only shows inside the account panel. That panel also holds "Sign out": never touch anything else in it.
+// While it is open, the page's text is also read for the signed-in account's email address: C3 and C5 run on two
+// different Google accounts (the user's rule, 2026-10-29) and the C3 connector refuses to work on the C5 one.
 async function readCredits(page: Page): Promise<number | undefined> {
+  return (await readAccountPanel(page)).credits;
+}
+
+async function readAccountPanel(page: Page): Promise<{ credits?: number; account?: string }> {
   await dismissOverlays(page);
   await scrollToTop(page);
   await page.getByRole("button", { name: "Account details" }).click({ timeout: 5000 });
@@ -95,7 +105,9 @@ async function readCredits(page: Page): Promise<number | undefined> {
   try {
     await link.waitFor({ state: "visible", timeout: 5000 });
     const n = Number((await link.innerText()).replace(/[^\d]/g, ""));
-    return Number.isNaN(n) ? undefined : n;
+    const text = await page.locator("body").innerText().catch(() => "");
+    const account = text.match(/[\w.+-]+@[\w-]+(\.[\w-]+)+/)?.[0]?.toLowerCase();
+    return { credits: Number.isNaN(n) ? undefined : n, account };
   } finally {
     await dismissOverlays(page);
     await pause(page, 300);

@@ -7,15 +7,22 @@ description: Write a C3 Stickman Explainer video (a vertical Short under a minut
 
 `engine.md` in this folder is the creative engine: states, STYLE ANCHOR, ACCENT lock, visual safety rules, audio-safe
 word swaps, timing and every prompt format. Read it in full at the start and follow it exactly, except where this file
-overrides it. C3 uses the same `flow` tools as C5 (their names say `c5`, they serve both): what makes a video C3 is
-`engine: "c3"` in its record. A C3 video is a vertical 9:16 YouTube Short just under a minute (the user's rule, 2026-10-29):
+overrides it.
+
+**C3 has its own Flow connector, `flow-c3`** (the user's rule, 2026-10-29): its own Flow Studio at
+http://127.0.0.1:8788, its own Chrome window signed in to the C3 Google account (never the C5 one) and its own video
+folder. Use ONLY the `flow-c3` connector's tools for C3, never the `flow` connector (that one is C5's). Its tools have
+the same names as C5's (`flow_production`, `flow_c5_stills` ... the names say `c5`, they serve both); what makes a
+video C3 is `engine: "c3"` in its record. If no `flow-c3` connector is listed, tell the user to close Claude,
+double-click "Add C3 connector" in their flow-mcp folder, start Claude again, and double-click "Sign in to Flow C3"
+once. A C3 video is a vertical 9:16 YouTube Short just under a minute (the user's rule, 2026-10-29):
 the tools draw its stills, clips and thumbnails 9:16 by themselves, and the CapCut build puts it on a 9:16 canvas with
 word-by-word highlight captions. It has no mascot: each video draws its own one or two characters, and the voiceover
 uses the C3 recording of the user's own voice.
 
 Everything for one video is saved with `flow_production` (one record per video, in its own folder). Save each state's
-output there as you produce it: the other tools read their prompts from it, and Flow Studio (http://127.0.0.1:8787)
-shows it live.
+output there as you produce it: the other tools read their prompts from it, and Flow Studio C3
+(http://127.0.0.1:8788) shows it live.
 
 ## Two passes: writing here, Flow on a cheaper model
 
@@ -27,9 +34,13 @@ presses Flow Studio's buttons) and SENDS the saved prompts to Flow. So, unless t
 - Keep engine.md's HARD STOPs; the user reviews the written prompts, not pictures. STATE 5 goes one part per turn.
 - In STATE 6 save the `clip_prompt`s and the per-clip cap (`settings.max_credits`), but do not ask to spend credits:
   the spending yes is asked in the other pass.
-- When the thumbnail prompts are saved, set `state: "prompts_ready"` and end with:
-  "All prompts are saved. Switch to a cheaper model and say 'run C3 in Flow', or press the buttons in Flow Studio.
-  Come back here for any prompt that needs rewriting, and for 'C3 branding' once the voiceover is done."
+- When the thumbnail prompts are saved, set `state: "prompts_ready"` and end with this reminder, word for word:
+  "⏰ REMINDER: switch to the cheaper model now (the model menu under the message box), then say 'run C3 in Flow',
+  or press the buttons in Flow Studio C3 (http://127.0.0.1:8788). Its Flow window must be signed in to your C3
+  Google account. Come back to the strong model for any prompt that needs rewriting, and for 'C3 branding' once the
+  voiceover is done."
+- This pass is for the strong model. If you can tell you are a smaller, cheaper model (a Haiku or Sonnet, say), say
+  once at the start: "⏰ You're on a cheaper model. Switch to the strong model for writing, then carry on." and wait.
 - Later visits: "rewrite C3 still N" (or sheet, clip, thumbnail) -> read the record, rewrite that prompt as engine.md
   says with the user's note, save it, and tell them to say "redo still N" in the cheaper pass. "C3 branding" -> STATE 8. "Shorten the C3 script" (the voiceover ran over 58 s) -> cut words from the beats that
   run longest, keep every fact and the beat count, re-save the script and the beats' `text`, and tell them to record
@@ -40,9 +51,9 @@ presses Flow Studio's buttons) and SENDS the saved prompts to Flow. So, unless t
 
 ## Before STATE 1
 
-0. Always, first: call `flow_open_studio` so the user can read along in Flow Studio (it only opens the panel in their
-   browser and never touches Flow). Never use computer use for it. If the flow tools are missing, tell the user to
-   restart Claude, or to double-click `Flow Studio.cmd` in their flow-mcp folder.
+0. Always, first: call the `flow-c3` connector's `flow_open_studio` so the user can read along and review the stills
+   in Flow Studio C3 (it only opens the panel in their browser and never touches Flow). Never use computer use for
+   it. If it doesn't open, tell the user to double-click "Flow Studio C3" in their flow-mcp folder.
 1. Call `flow_productions`. If a C3 video (folder starting `C3-`) is part-way through, ask once whether to carry on
    with it or start a new one.
 2. Name a new video's folder `C3-<yyyy-mm-dd>` (add `-2`, `-3` for a second one that day), and save
@@ -51,11 +62,14 @@ presses Flow Studio's buttons) and SENDS the saved prompts to Flow. So, unless t
 ## State overrides
 
 **STATE 1 — Ideas.** If the user gave topics (in chat, or in Flow Studio's Topics tab, saved as `my_topics`), build the
-ideas from those first. Save them as `topics` (`n`, `title`, `hook`) with `engine: "c3"` and `state: "ideas"`. When the
+ideas from those first. Search the web for every idea to rate how overdone it is, as engine.md says (each line ends
+with its Saturation rating and reason). Save them as `topics` (`n`, `title`, `hook`, `saturation` = the rating and its
+reason) with `engine: "c3"` and `state: "ideas"`. When the
 user picks, save `picked` and a working `title`.
 
-**STATE 2 — Script.** Research with web search; never invent a detail. Show the script as one paragraph (plus any
-FACT FLAG line), as engine.md says. Save it as `script.chapters`: three entries, `marker` `OPENING`, `MIDDLE` and
+**STATE 2 — Script.** Research with web search; never invent a detail. Show the script as one paragraph, then the HOOK CHECK line
+(the three openings tried, their scores, the winner) and any FACT FLAG line, as engine.md says. Never show a script
+whose opening scored under 8: rewrite it first. Save it as `script.chapters`: three entries, `marker` `OPENING`, `MIDDLE` and
 `ENDING`, each with its part's narration as `text`, split at the beat boundaries the timing table gives, so together
 they are the whole paragraph word for word. Save the FACT FLAG line, if any, as `script.ledger`. Each extension
 re-saves the whole script. Set `state: "script"`.

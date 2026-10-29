@@ -460,10 +460,27 @@ export class LocalCore implements Core {
 
   async status({ detailed }: Args<"status">) {
     const flow = await getFlowState(detailed && !this.queue.busy);
-    return { flow, pacing: this.queue.pausedReason, output_root: OUTPUT_ROOT, jobs: this.queue.list().map(jobView) };
+    if (flow.account) this.account = noteAccount(flow.account);
+    return { flow, connector: CONNECTOR, pacing: this.queue.pausedReason, output_root: OUTPUT_ROOT, jobs: this.queue.list().map(jobView), ...accountCheck(this.account) };
+  }
+
+  // Which Google account this connector's Flow Chrome is signed in to, read once per process.
+  private account?: string;
+
+  // C3 and C5 use different Flow accounts: a connector started with FLOW_MCP_OTHER_HOME (the C3 one points at the
+  // C5 connector's home) refuses to queue anything while signed in to the account that home has recorded.
+  private async guardAccount() {
+    if (!OTHER_HOME) return;
+    if (!this.account && !this.queue.busy) {
+      const flow = await getFlowState(true).catch(() => undefined);
+      if (flow?.account) this.account = noteAccount(flow.account);
+    }
+    const check = accountCheck(this.account);
+    if (check.account_conflict) throw new Error(check.account_conflict);
   }
 
   async generate({ project, scenes }: Args<"generate">) {
+    await this.guardAccount();
     const invalid = scenes.findIndex((s, i) => s.chain_previous && (i === 0 || s.first_frame || s.type === "image"));
     if (invalid >= 0) {
       throw new Error(`Scene ${invalid + 1}: chain_previous needs a preceding video scene in the same call and cannot be combined with first_frame.`);
@@ -803,30 +820,31 @@ export class LocalCore implements Core {
     return { dir, channel: channelDir(OUTPUT_ROOT), production: p, progress: progress(dir, p), files, saved: Boolean(patch) };
   }
 
-  private queueAll(list: Parameters<JobQueue["add"]>[0][]) {
+  private async queueAll(list: Parameters<JobQueue["add"]>[0][]) {
+    await this.guardAccount();
     return list.map((params) => jobView(this.queue.add(params)));
   }
 
   async c5_sheets({ video, ids, redo }: Args<"c5_sheets">) {
     const dir = projectDir(video);
-    const jobs = this.queueAll(planSheets(OUTPUT_ROOT, dir, readProduction(dir, video), ids, redo));
+    const jobs = await this.queueAll(planSheets(OUTPUT_ROOT, dir, readProduction(dir, video), ids, redo));
     return { jobs, note: jobs.length ? "Sheets are free images. The mascot sheet is saved once for the channel and reused by every video." : "Every sheet is drawn already. Pass redo: true to draw one again." };
   }
 
   async c5_stills({ video, beats, redo, mode }: Args<"c5_stills">) {
     const dir = projectDir(video);
-    return { jobs: this.queueAll(planStills(OUTPUT_ROOT, dir, readProduction(dir, video), beats, redo, mode)), credits: 0 };
+    return { jobs: await this.queueAll(planStills(OUTPUT_ROOT, dir, readProduction(dir, video), beats, redo, mode)), credits: 0 };
   }
 
   async c5_clips({ video, beats, max_credits, model, duration, resolution, redo }: Args<"c5_clips">) {
     const dir = projectDir(video);
     const plan = planClips(dir, readProduction(dir, video), beats, redo, { max_credits, model, duration, resolution });
-    return { jobs: this.queueAll(plan.jobs), skipped: plan.skipped, cap_per_clip: max_credits };
+    return { jobs: await this.queueAll(plan.jobs), skipped: plan.skipped, cap_per_clip: max_credits };
   }
 
   async c5_thumbnails({ video, numbers, redo }: Args<"c5_thumbnails">) {
     const dir = projectDir(video);
-    return { jobs: this.queueAll(planThumbnails(OUTPUT_ROOT, dir, readProduction(dir, video), numbers, redo)), credits: 0 };
+    return { jobs: await this.queueAll(planThumbnails(OUTPUT_ROOT, dir, readProduction(dir, video), numbers, redo)), credits: 0 };
   }
 
   async voiceover({ video, engine, voice, style }: Args<"voiceover">) {
@@ -914,4 +932,30 @@ export class LocalCore implements Core {
 function shortCheck(p: Production, seconds: number) {
   if (engineOf(p) !== "c3" || seconds <= 58) return {};
   return { over_short_limit: `The voiceover runs ${seconds.toFixed(1)} s, over the 58 s a C3 Short allows. Shorten the script in the writing pass ("shorten the C3 script"), then record again.` };
+}
+
+// Two connectors can run side by side, one per channel (2026-10-29): C5 on the default home and port, C3 with its own
+// FLOW_MCP_HOME (so its own Chrome profile and Google sign-in), FLOW_MCP_CDP_PORT, FLOW_MCP_PORT and FLOW_MCP_OUTPUT.
+// Each records the account it has seen in its home; FLOW_MCP_OTHER_HOME names the other connector's home to compare.
+const CONNECTOR = process.env.FLOW_MCP_NAME ?? "C5";
+const OTHER_HOME = process.env.FLOW_MCP_OTHER_HOME;
+const ACCOUNT_FILE = (home: string) => join(home, "account.json");
+
+function noteAccount(account: string): string {
+  try {
+    mkdirSync(HOME_DIR, { recursive: true });
+    writeFileSync(ACCOUNT_FILE(HOME_DIR), JSON.stringify({ account, connector: CONNECTOR, seen: new Date().toISOString() }));
+  } catch {}
+  return account;
+}
+
+function accountCheck(account: string | undefined): { account?: string; other_account?: string; account_conflict?: string } {
+  if (!OTHER_HOME) return { account };
+  let other: string | undefined;
+  try {
+    other = (JSON.parse(readFileSync(ACCOUNT_FILE(OTHER_HOME), "utf8")) as { account?: string }).account;
+  } catch {}
+  if (account && other && account === other)
+    return { account, other_account: other, account_conflict: `This ${CONNECTOR} Flow window is signed in to ${account}, the same Google account the other channel uses. Sign this window in to the ${CONNECTOR} account instead (double-click "Sign in to Flow ${CONNECTOR}" in the flow-mcp folder), then try again.` };
+  return { account, other_account: other };
 }

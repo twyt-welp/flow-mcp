@@ -107,7 +107,17 @@ Every idea must be a real, researchable event; tellable in under a minute; showa
 portrayable without graphic violence. No invented events, no conspiracy premises stated as fact, nothing that needs
 heavy explanation.
 
-Format each idea as one line: Title — a one-line hook naming the specific angle.
+Check how overdone each topic already is before listing it: search the web (YouTube and Shorts, the big history
+channels, recent viral posts) for the event. Rate it:
+- low: little made on it, or nothing on this angle
+- medium: covered, but not as a Short or not from this angle
+- high: many videos and Shorts already tell it this way
+
+Prefer low and medium. A high topic stays in the list only with an angle the existing videos miss, and the line says
+which.
+
+Format each idea as one line: Title — a one-line hook naming the specific angle · Saturation: low / medium / high —
+a few words on why (what already exists), and for high, the fresh angle.
 
 Output the list and nothing else. End exactly with:
 
@@ -123,8 +133,21 @@ Voice: plain, conversational, short sentences, chronological where it helps. Acc
 Never invent a detail. For victims, crime or tragedy, stay factual and restrained. No gore, dramatised suffering,
 sponsor copy, calls to action, subscribe requests or sign-offs.
 
+Catchy first, always. A Short is kept or swiped in its first two seconds, so:
+- The first sentence (the first five to eight words, the first 2–3 seconds) is the hook: a surprising fact, a stark
+  number, a question the viewer needs answered, or the moment of tension itself. Never a warm-up ("In 1958...", "This
+  is the story of...", "Have you ever wondered..."), never the context before the surprise.
+- Before writing the rest, draft THREE different opening lines, score each 1–10 on how fast it hooks a stranger
+  scrolling past (surprise, stakes, curiosity gap, plain words), and keep the best. Rewrite until the best scores 8 or
+  more.
+- Every beat ends on a pull into the next one (a turn, an unanswered detail, a "but"), and the last beat pays the hook
+  off. Cut any sentence that only explains.
+
 Output the voiceover as ONE continuous paragraph: no beat numbers, labels, brackets, timestamps, word counts, stage
 directions or line breaks.
+
+Under the paragraph, add one line starting "HOOK CHECK:": the three opening lines you tried with their scores, which
+one won and why, and any beat you tightened because it dragged.
 
 If any fact in the script is genuinely disputed or uncertain, add one line under the paragraph, starting "FACT FLAG:",
 naming it. Write disputed facts in the script as disputed. Leave the line out when there is nothing to flag.

@@ -42,7 +42,7 @@ export const productionShape = z.object({
   title: z.string().optional(),
   state: z.string().optional().describe("Where the engine is: ideas, script, cast, beats, stills, clips, voice, capcut, thumbnails, branding, done."),
   my_topics: z.array(z.string()).optional().describe("The user's own topic list, typed in Flow Studio: STATE 1 builds its ideas from these first."),
-  topics: z.array(z.object({ n: z.number().int(), title: z.string(), hook: z.string().optional() })).optional(),
+  topics: z.array(z.object({ n: z.number().int(), title: z.string(), hook: z.string().optional(), saturation: z.string().optional().describe("C3: how overdone the topic is (low, medium, high) and why.") })).optional(),
   picked: z.union([z.number().int(), z.string()]).optional().describe("The idea number picked in STATE 1, or the user's own scenario."),
   script: z
     .object({

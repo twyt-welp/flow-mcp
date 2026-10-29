@@ -8,7 +8,7 @@ description: Write a C5 Reborn Apocalypse Engine video for Google Flow - topics,
 `engine.md` in this folder is the creative engine: states, locks (MASCOT, STYLE, FLASHBACK, THREAT, BASE), series
 rules, visual safety rules, audio-safe word swaps, timing and every prompt format. Read it in full at the start and
 follow it exactly, except where this file overrides it. The overrides turn "paste this into your video tool" into real
-`flow` tool calls, so the user approves results instead of copying prompts.
+`flow` tool calls, so the user approves results instead of copying prompts. C5 uses only the `flow` connector (the C5 Google account); never the `flow-c3` connector, which is C3's.
 
 Everything for one video is saved with `flow_production` (one record per video, in its own folder). Save each state's
 output there as you produce it: the other tools read their prompts from it, and Flow Studio

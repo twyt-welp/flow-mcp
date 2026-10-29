@@ -1497,6 +1497,15 @@ function renderStatus(st) {
   busy = false;
   const cls = !f.signedIn || !f.inProject ? "down" : active ? "rolling" : "ready";
   const text = !f.signedIn ? "Not signed in" : !f.inProject ? "No project open" : active ? "Working" : "Ready";
+  // Each channel has its own Studio (C5 on 8787, C3 on 8788): the heading and tab title say which one this is, and
+  // which Google account its Flow window is signed in to.
+  if (st.connector && st.connector !== renderStatus.connector) {
+    renderStatus.connector = st.connector;
+    document.title = `Flow Studio ${st.connector}`;
+    $("h1").innerHTML = `Flow <span>Studio ${esc(st.connector)}</span>`;
+  }
+  if (st.account) $("h1").title = `Signed in to Flow as ${st.account}`;
+  if (st.account_conflict && renderStatus.warned !== st.account) { renderStatus.warned = st.account; toast(st.account_conflict, true); }
   if (f.credits_remaining !== undefined) renderStatus.credits = f.credits_remaining;
   if (f.plan) renderStatus.plan = f.plan;
   if ($("#dk_credits") && renderStatus.credits !== undefined) $("#dk_credits").textContent = renderStatus.credits.toLocaleString();
@@ -1560,7 +1569,7 @@ async function c5Load() {
 $("#v_pick").onchange = (e) => { S.c5.video = e.target.value; save(); c5Load(); };
 $("#v_new").onclick = async () => {
   if (!guard()) return;
-  const d = new Date(), name = prompt("Folder name for the new video", `C5-${d.toISOString().slice(0, 10)}`);
+  const d = new Date(), name = prompt("Folder name for the new video", `${renderStatus.connector ?? "C5"}-${d.toISOString().slice(0, 10)}`);
   if (!name) return;
   try { await api("production", { video: name.trim(), patch: { state: "ideas" } }); S.c5.video = name.trim().replace(/[^\w.-]+/g, "_"); save(); await c5Videos(); await c5Load(); toast("New video started. Ask Claude for ideas, or type your topics first."); }
   catch (err) { toast(err.message, true); }
