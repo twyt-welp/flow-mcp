@@ -3,7 +3,7 @@ import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 
-// One video of the C5 Reborn engine lives in one folder, and production.json in it is the single record of where that
+// One video (of the C5 Reborn engine, or the C3 Stickman Explainer) lives in one folder, and production.json in it is the single record of where that
 // video stands: Claude writes the engine's text into it (ideas, script, locks, beat map, prompts, branding), and every
 // Flow, voice and CapCut step reads its prompts from it. Files follow fixed names, so what exists on disk IS the
 // progress and nothing has to be written back when a job lands:
@@ -35,7 +35,10 @@ const sheet = z.object({
   prompt: z.string().describe("The full sheet image prompt."),
 });
 
+export const ENGINES = ["c5", "c3"] as const;
+
 export const productionShape = z.object({
+  engine: z.enum(ENGINES).optional().describe("Which engine this video follows: 'c5' (Reborn Apocalypse, the channel mascot) or 'c3' (Stickman Explainer: its own cast, no mascot, the C3 voice). Default c5."),
   title: z.string().optional(),
   state: z.string().optional().describe("Where the engine is: ideas, script, cast, beats, stills, clips, voice, capcut, thumbnails, branding, done."),
   my_topics: z.array(z.string()).optional().describe("The user's own topic list, typed in Flow Studio: STATE 1 builds its ideas from these first."),
@@ -70,6 +73,8 @@ export type Production = z.infer<typeof productionShape> & { video: string; upda
 export type Beat = z.infer<typeof beat>;
 
 export const FILE = "production.json";
+// C3 videos (2026-10-29) share every tool with C5; what differs is read from here: no mascot, and the C3 voice.
+export const engineOf = (p: Pick<Production, "engine" | "video">) => p.engine ?? (/^C3[-_]/i.test(p.video) ? "c3" : "c5");
 export const pad = (n: number) => String(n).padStart(2, "0");
 export const sub = (dir: string, ...parts: string[]) => join(dir, ...parts);
 export const stillFile = (dir: string, n: number) => firstExisting(join(dir, "stills"), `scene-${pad(n)}`, /\.(png|jpe?g|webp)$/i);

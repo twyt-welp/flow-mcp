@@ -339,14 +339,14 @@ server.registerTool(
   (args) => reply(patient("flow_captions", core.captions(args))),
 );
 
-/* ---------- C5 Reborn engine ---------- */
+/* ---------- C5 Reborn engine (and C3 Stickman Explainer videos, which use the same tools) ---------- */
 
 server.registerTool(
   "flow_production",
   {
     title: "Read or save a video's production record",
     description:
-      "The C5 Reborn engine keeps one record per video (production.json in its folder): topics, the picked idea, the script by chapter, the cast/threat/base sheets with their locks and prompts, the beat map with every still and clip prompt, edit moves, overlays and sound cues, thumbnails and branding. Save each state's output here as you produce it, then the other flow_c5_* tools, the voiceover and the CapCut build all read from it, and Flow Studio shows it. Without `patch` it only reads, and also reports what exists on disk (which stills, clips and sheets are drawn).",
+      "The C5 Reborn engine (and the C3 Stickman Explainer, with engine: 'c3' in the record: no mascot, its own cast, the C3 voice) keeps one record per video (production.json in its folder): topics, the picked idea, the script by chapter, the cast/threat/base sheets with their locks and prompts, the beat map with every still and clip prompt, edit moves, overlays and sound cues, thumbnails and branding. Save each state's output here as you produce it, then the other flow_c5_* tools, the voiceover and the CapCut build all read from it, and Flow Studio shows it. Without `patch` it only reads, and also reports what exists on disk (which stills, clips and sheets are drawn).",
     inputSchema: shapes.production,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
@@ -357,7 +357,7 @@ server.registerTool(
   "flow_productions",
   {
     title: "List videos in production",
-    description: "List the C5 videos that have a production record, newest first, with the state each one is in.",
+    description: "List the C5 and C3 videos that have a production record, newest first, with the state each one is in.",
     inputSchema: shapes.productions,
     annotations: { readOnlyHint: true, openWorldHint: false },
   },
@@ -368,7 +368,7 @@ server.registerTool(
   "flow_c5_sheets",
   {
     title: "Draw the cast, threat and base sheets",
-    description: "Queue the video's reference sheets as free Flow images, from the sheet prompts saved in its production record. The mascot sheet is drawn once for the channel and reused by every later video. Use flow_wait for the files.",
+    description: "Queue the video's reference sheets as free Flow images, from the sheet prompts saved in its production record. For C5 the mascot is the channel's own picture and never redrawn; C3 videos have no mascot. Use flow_wait for the files.",
     inputSchema: shapes.c5_sheets,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   },
@@ -379,7 +379,7 @@ server.registerTool(
   "flow_c5_stills",
   {
     title: "Draw the scene stills",
-    description: "Queue the beat stills from the saved still prompts, free. By default one Flow Agent batch per chapter, with the mascot, characters, threat and base sheets attached as references so every still stays on-model; still N is saved as stills/scene-NN. Use flow_wait for the files.",
+    description: "Queue the beat stills from the saved still prompts, free. By default one Flow Agent batch per chapter, with the mascot (C5 only), characters, threat and base sheets attached as references so every still stays on-model; still N is saved as stills/scene-NN. Use flow_wait for the files.",
     inputSchema: shapes.c5_stills,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   },
@@ -401,7 +401,7 @@ server.registerTool(
   "flow_c5_thumbnails",
   {
     title: "Draw the thumbnails",
-    description: "Queue the saved thumbnail prompts as free Flow images, with the mascot (and any character or base named in the prompt) attached as references. Headlines are added in editing, never drawn in.",
+    description: "Queue the saved thumbnail prompts as free Flow images, with the mascot (C5 only) and any character or base named in the prompt attached as references. Headlines are added in editing, never drawn in.",
     inputSchema: shapes.c5_thumbnails,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   },
@@ -412,7 +412,7 @@ server.registerTool(
   "flow_voiceover",
   {
     title: "Record the whole voiceover and time every beat",
-    description: "Speak the saved script in the user's own cloned voice (OpenVoice, free, the default once it is set up on this computer), the channel's ElevenLabs voice (engine 'elevenlabs', the other option; uses the user's ElevenLabs characters, no Flow credits) or a free Google AI Studio voice, in a few long takes, join them into voice/narration.wav, and work out when every beat is spoken (ElevenLabs reports each word's time itself; for OpenVoice and Google, whisper.cpp word times when installed, otherwise the voice's own pauses). Never ask for or handle the keys: the user saves them in the panel. The CapCut build is cut to these times. Re-running only re-records takes whose text changed.",
+    description: "Speak the saved script in the user's own cloned voice (OpenVoice, free, the default once it is set up on this computer; a C3 video uses the C3 recording in channel/c3), the channel's ElevenLabs voice (engine 'elevenlabs', the other option; uses the user's ElevenLabs characters, no Flow credits) or a free Google AI Studio voice, in a few long takes, join them into voice/narration.wav, and work out when every beat is spoken (ElevenLabs reports each word's time itself; for OpenVoice and Google, whisper.cpp word times when installed, otherwise the voice's own pauses). Never ask for or handle the keys: the user saves them in the panel. The CapCut build is cut to these times. Re-running only re-records takes whose text changed.",
     inputSchema: shapes.voiceover,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
   },

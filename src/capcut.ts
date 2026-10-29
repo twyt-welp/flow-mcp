@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 import { mediaInfo, type MediaInfo } from "./audio.js";
 import { T } from "./capcut-template.js";
 import { IS_MAC, IS_WIN } from "./platform.js";
-import { clipFile, stillFile, type Beat, type Production } from "./production.js";
+import { clipFile, engineOf, stillFile, type Beat, type Production } from "./production.js";
 import type { Timing } from "./voiceover.js";
 
 const run = promisify(execFile);
@@ -528,10 +528,17 @@ export async function buildCapcut(o: BuildOptions) {
       report.titles++;
     }
   }
+  // C3 videos carry one headline over the opening, plain white, centred low, for 2.5 s (the C3 engine's edit rule).
+  const c3 = engineOf(o.production) === "c3";
   if (o.ledger) {
     for (const bt of timing.beats) {
       const text = beats.get(bt.n)?.overlay?.trim();
       if (!text || /^(none|-|n\/a)$/i.test(text)) continue;
+      if (c3) {
+        textSeg(track("Titles"), text.toUpperCase(), us(bt.start + 0.2), Math.min(us(2.5), us(bt.end - bt.start)), { size: 15, color: [1, 1, 1], x: 0, y: -0.62 });
+        report.titles++;
+        continue;
+      }
       if (/^day\s*[-+]?\d+$/i.test(text) && timing.chapters.some((c) => c.start === bt.start)) continue;
       const dur = Math.min(us(5), us(bt.end - bt.start) - us(0.4));
       if (dur < us(1)) continue;

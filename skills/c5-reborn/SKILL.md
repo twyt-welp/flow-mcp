@@ -50,7 +50,7 @@ double-click `Flow Studio.cmd` in their flow-mcp folder.
 1. Call `flow_status`. If not signed in or no project is open, stop and tell the user to run `npm run login` in their
    flow-mcp folder, sign in and open a Flow project.
 2. Report the plan and credits left in one line (Studio is already open from step 0).
-3. Call `flow_productions`. If a video is part-way through, ask once whether to carry on with it or start a new one.
+3. Call `flow_productions`. If a C5 video (not a `C3-` folder) is part-way through, ask once whether to carry on with it or start a new one.
 4. Pick the video's folder name now: `C5-<yyyy-mm-dd>`, renamed in spirit by its title later (the folder name stays).
 
 ## State overrides

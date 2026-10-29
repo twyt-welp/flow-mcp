@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, renameSync } from "node:fs";
 import { join } from "node:path";
-import { clipFile, mascotSheet, OWN_CHANNEL_DIR, pad, sheetFile, stillFile, thumbFile, type Beat, type Production } from "./production.js";
+import { clipFile, engineOf, mascotSheet, OWN_CHANNEL_DIR, pad, sheetFile, stillFile, thumbFile, type Beat, type Production } from "./production.js";
 import type { SceneParams } from "./queue.js";
 
 // Turns a video's production record into Flow jobs. Every prompt is used exactly as the engine wrote it (the locks are
@@ -17,8 +17,10 @@ export function sheetPath(root: string, dir: string, s: Pick<Sheet, "id" | "kind
 
 // The mascot rides along with every still and thumbnail even when this video's record lists no mascot sheet: the
 // channel's own sheet is the reference, and the writing pass no longer re-declares it.
+// C3 videos have no mascot: each one draws its own one or two characters.
 function withMascot(p: Production): Sheet[] {
   const sheets = p.sheets ?? [];
+  if (engineOf(p) === "c3") return sheets.filter((s) => s.kind !== "mascot");
   return sheets.some((s) => s.kind === "mascot") ? sheets : [{ id: "mascot", kind: "mascot", handle: "@YOU", lock: "", prompt: "" } as Sheet, ...sheets];
 }
 

@@ -15,7 +15,7 @@ import { TECHNIQUES, techniqueById } from "./techniques.js";
 import { HOME_DIR } from "./chrome.js";
 import { channelDir, planClips, planSheets, planStills, planThumbnails, sheetPath } from "./c5.js";
 import { buildCapcut, capcutRunning, DRAFTS_ROOT, listCapcutProjects, restoreCapcut } from "./capcut.js";
-import { clipFile, listProductions, productionShape, progress, readProduction, stillFile, thumbFile, writeProduction } from "./production.js";
+import { clipFile, engineOf, listProductions, productionShape, progress, readProduction, stillFile, thumbFile, writeProduction } from "./production.js";
 import { recordVoiceover } from "./voiceover.js";
 import { ensureSoundLibrary, SOUND_NAMES } from "./sound.js";
 
@@ -752,7 +752,7 @@ export class LocalCore implements Core {
   async voices() {
     // The panel words itself from these, so a PC never reads "this Mac".
     const place = { computer: COMPUTER, bin: BIN, local_engine: IS_MAC ? "macOS voice" : IS_WIN ? "Windows voice" : "System voice", platform: process.platform };
-    return { gemini: GEMINI_VOICES, gemini_ready: Boolean(geminiKey()), elevenlabs_ready: Boolean(elevenKey()), elevenlabs_voice: elevenVoice() ?? null, openvoice: openVoiceReady(), mac: await localVoices(), place };
+    return { gemini: GEMINI_VOICES, gemini_ready: Boolean(geminiKey()), elevenlabs_ready: Boolean(elevenKey()), elevenlabs_voice: elevenVoice() ?? null, openvoice: openVoiceReady(), openvoice_c3: openVoiceReady("c3"), mac: await localVoices(), place };
   }
 
   async narrate({ project, text, voice, engine, style }: Args<"narrate">) {
@@ -817,7 +817,9 @@ export class LocalCore implements Core {
   async voiceover({ video, engine, voice, style }: Args<"voiceover">) {
     const dir = projectDir(video);
     const p = readProduction(dir, video);
-    const eng = engine ?? (openVoiceReady().ready ? "openvoice" : elevenKey() ? "elevenlabs" : "gemini");
+    // A C3 video speaks in the C3 recording of the user's voice (channel/c3), a C5 video in the channel's own.
+    const profile = engineOf(p) === "c3" ? "c3" : undefined;
+    const eng = engine ?? (openVoiceReady(profile).ready ? "openvoice" : elevenKey() ? "elevenlabs" : "gemini");
     const st = style ?? p.settings?.style;
     if (eng === "elevenlabs") {
       const id = voice ?? elevenVoice();
@@ -826,7 +828,7 @@ export class LocalCore implements Core {
       return { file: timing.file, seconds: timing.total, aligned: timing.aligned, chapters: timing.chapters, beats: timing.beats.length, engine: eng, credits: 0 };
     }
     if (eng === "openvoice") {
-      const timing = await recordVoiceover(dir, p, { engine: eng, voice: "my voice" });
+      const timing = await recordVoiceover(dir, p, { engine: eng, voice: profile ? `my ${profile.toUpperCase()} voice` : "my voice", profile });
       return { file: timing.file, seconds: timing.total, aligned: timing.aligned, chapters: timing.chapters, beats: timing.beats.length, engine: eng, credits: 0 };
     }
     const v = voice ?? p.settings?.voice ?? "Charon";

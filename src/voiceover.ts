@@ -5,7 +5,7 @@ import { speakLocally } from "./assemble.js";
 import { transcribe } from "./captions.js";
 import { speakWithElevenLabs, type SpokenWord } from "./elevenlabs.js";
 import { speakWithGemini } from "./gemini.js";
-import { speakWithOpenVoice } from "./openvoice.js";
+import { openVoiceStamp, speakWithOpenVoice } from "./openvoice.js";
 import { pad, type Production } from "./production.js";
 
 // About three minutes of speech per take: long enough that a whole video is four or five requests (the free AI Studio
@@ -104,11 +104,11 @@ function takes(chapters: { marker: string; text: string }[]): Take[] {
 
 export type VoiceEngine = "elevenlabs" | "openvoice" | "gemini" | "mac";
 
-async function speak(engine: VoiceEngine, text: string, voice: string, target: string, style?: string): Promise<{ duration: number; words?: SpokenWord[] }> {
+async function speak(engine: VoiceEngine, text: string, voice: string, target: string, style?: string, profile?: string): Promise<{ duration: number; words?: SpokenWord[] }> {
   for (let attempt = 0; ; attempt++) {
     try {
       if (engine === "elevenlabs") return await speakWithElevenLabs(text, voice, target);
-      if (engine === "openvoice") return await speakWithOpenVoice(text, target);
+      if (engine === "openvoice") return await speakWithOpenVoice(text, target, profile);
       return engine === "mac" ? await speakLocally(text, voice, target) : await speakWithGemini(text, voice, target, style);
     } catch (err) {
       // The free tier answers 429 when requests come too quickly: wait it out a few times rather than fail the video.
@@ -126,7 +126,7 @@ async function speak(engine: VoiceEngine, text: string, voice: string, target: s
 export async function recordVoiceover(
   dir: string,
   p: Production,
-  o: { engine: VoiceEngine; voice: string; style?: string },
+  o: { engine: VoiceEngine; voice: string; style?: string; profile?: string },
   onStep: (s: string) => void = () => {},
 ): Promise<Timing> {
   const chapters = p.script?.chapters ?? [];
@@ -139,10 +139,11 @@ export async function recordVoiceover(
     const file = join(out, `take-${pad(i + 1)}.wav`);
     const meta = join(out, `take-${pad(i + 1)}.txt`);
     const said = join(out, `take-${pad(i + 1)}.words.json`);
-    const stamp = `${o.engine}|${o.voice}|${o.style ?? ""}\n${t.text}`;
+    // Changed OpenVoice speed or pauses re-record too; at the defaults the stamp is the old one.
+    const stamp = `${o.engine}|${o.voice}|${o.style ?? ""}${o.engine === "openvoice" ? openVoiceStamp(o.profile) : ""}\n${t.text}`;
     if (!(existsSync(file) && existsSync(meta) && readFileSync(meta, "utf8") === stamp)) {
       onStep(`recording take ${i + 1} of ${parts.length}`);
-      const spoken = await speak(o.engine, t.text, o.voice, file, o.style);
+      const spoken = await speak(o.engine, t.text, o.voice, file, o.style, o.profile);
       // ElevenLabs says when each word is spoken: kept beside the take, it times the beats exactly.
       if (spoken?.words?.length) writeFileSync(said, JSON.stringify(spoken.words));
       else rmSync(said, { force: true });
