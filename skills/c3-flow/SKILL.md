@@ -81,8 +81,10 @@ the beats (merge by `n`):
 
 Save the part's SOUND line into `sound` (`chapter`, `music`, `sfx`, `ambient`). Set `state: "stills"`.
 
-**STATE 6 — Hero clips.** Write one clip prompt per ★ beat as engine.md says and save it as `clip_prompt`. Ask once,
-if not already saved in `settings.max_credits`: the per-clip credit cap (default 15). Save it. Set `state: "clips"` and
+**STATE 6 — Hero clips.** Write one clip prompt per ★ beat as engine.md says and save it as `clip_prompt`. C3 has a budget
+of 50 credits per video (the user's choice, 2026-10-29: Flow's free allowance), so the hero clips times the per-clip cap
+must stay within 50: save `settings.max_credits` = 12 (four clips at most, 48 credits) unless the user names a lower
+cap, and never star more beats than fit (2 for 6 beats, 3 for 9, 4 for 12 all fit at 12). Set `state: "clips"` and
 end with "Type 'next' for thumbnails." (the clips are made in the other pass).
 
 **STATE 7 — Thumbnails.** Write the 5 prompts as engine.md says, save them as `thumbnails` (`n` 1-5, `template` = a

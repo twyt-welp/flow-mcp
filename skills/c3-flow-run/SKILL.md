@@ -31,8 +31,11 @@ Each queues jobs: `flow_wait` until they finish (it answers within a minute; cal
    OPENING, MIDDLE, ENDING). After each part show the paths and ask "Next part, or redo any?" A redo: `flow_c5_stills`
    with `beats`, `redo: true`, `mode: "one_by_one"`.
 3. **Hero clips (PAID).** Count the hero beats with a `clip_prompt` (two to four). The cap per clip is
-   `settings.max_credits` (default 15). Ask "Spend about N x 10 credits on these N clips? (yes / no)" and wait for a
-   clear yes; never spend without it. Then `flow_c5_clips` with `video`, `max_credits` = the cap and
+   `settings.max_credits` (default 12). C3 has a budget of 50 credits per video (the user's choice): the clips already
+   in `files.clips` plus the clips to make, times the cap, must stay within 50. If they would not, make only the first
+   ones that fit and say which were left as stills. A redo of a paid clip counts against the 50 too: ask before one
+   that would go over. Ask "Spend about N x 10 credits on these N clips (at most M, inside your 50)? (yes / no)" and
+   wait for a clear yes; never spend without it. Then `flow_c5_clips` with `video`, `max_credits` = the cap and
    `acknowledge_cost: true`. Each clip opens on its beat's still. A clip over the cap is skipped at no cost: say which.
    A clip made but not downloaded is already in Flow: `flow_download` it, never generate it again. `flow_retry` for a
    failed job. If a paid job vanishes from the queue, look at the grid (`flow_assets`) before running anything again.
