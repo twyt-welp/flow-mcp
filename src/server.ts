@@ -93,10 +93,12 @@ export async function startServer(core: Core): Promise<ServerRole> {
       }
 
       const method = url.pathname.match(/^\/api\/(\w+)$/)?.[1] as keyof Core | undefined;
-      if (req.method === "POST" && method && typeof core[method] === "function") {
-        const raw = (await readBody(req, 1024 * 1024)).toString() || "{}";
-        const shape = (shapes as Record<string, z.ZodRawShape>)[method];
-        const args = shape ? z.object(shape).parse(JSON.parse(raw)) : undefined;
+      // Only methods with an input shape are callable, so the core's private helpers are never reachable from a page.
+      const shape = method ? (shapes as Record<string, z.ZodRawShape>)[method] : undefined;
+      if (req.method === "POST" && method && shape && typeof core[method] === "function") {
+        // Production records carry a whole beat map of long prompts, so the body limit is generous.
+        const raw = (await readBody(req, 8 * 1024 * 1024)).toString() || "{}";
+        const args = z.object(shape).parse(JSON.parse(raw));
         return json(res, 200, await (core[method] as (a: unknown) => Promise<unknown>)(args));
       }
       json(res, 404, { error: "Not found." });

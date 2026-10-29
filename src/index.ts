@@ -6,6 +6,7 @@ import { LocalCore, shapes, type Core } from "./core.js";
 import { PLAYBOOK } from "./playbook.js";
 import { RemoteCore } from "./remote.js";
 import { PORT, startServer } from "./server.js";
+import { openUrl } from "./platform.js";
 
 const local = new LocalCore();
 const role = await startServer(local);
@@ -94,6 +95,25 @@ server.registerTool(
     annotations: { readOnlyHint: true, openWorldHint: true },
   },
   (args) => reply(core.status(args), { studio, playbook: PLAYBOOK, ...(tasks.size ? { slow_calls: [...tasks.values()].map(({ result, ...t }) => t) } : {}) }),
+);
+
+server.registerTool(
+  "flow_open_studio",
+  {
+    title: "Open Flow Studio",
+    description:
+      "Open the Flow Studio panel in the user's own browser. This MCP server already serves it while Claude runs, so nothing has to be double-clicked. Use when the user says \"open Flow Studio\", \"launch Studio\" or \"show me the panel\". Never use computer use for this.",
+    inputSchema: {},
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  },
+  () =>
+    reply(
+      (async () => {
+        if (!studio) throw new Error(`Port ${PORT} is used by another program, so Flow Studio cannot run. Set FLOW_MCP_PORT to a free port.`);
+        openUrl(studio);
+        return { opened: studio, note: "Studio stays up as long as Claude is running; no window needs to stay open." };
+      })(),
+    ),
 );
 
 server.registerTool(
@@ -317,6 +337,132 @@ server.registerTool(
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   },
   (args) => reply(patient("flow_captions", core.captions(args))),
+);
+
+/* ---------- C5 Reborn engine (and C3 Stickman Explainer videos, which use the same tools) ---------- */
+
+server.registerTool(
+  "flow_production",
+  {
+    title: "Read or save a video's production record",
+    description:
+      "The C5 Reborn engine (and the C3 Stickman Explainer, with engine: 'c3' in the record: no mascot, its own cast, the C3 voice) keeps one record per video (production.json in its folder): topics, the picked idea, the script by chapter, the cast/threat/base sheets with their locks and prompts, the beat map with every still and clip prompt, edit moves, overlays and sound cues, thumbnails and branding. Save each state's output here as you produce it, then the other flow_c5_* tools, the voiceover and the CapCut build all read from it, and Flow Studio shows it. Without `patch` it only reads, and also reports what exists on disk (which stills, clips and sheets are drawn).",
+    inputSchema: shapes.production,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+  (args) => reply(core.production(args)),
+);
+
+server.registerTool(
+  "flow_productions",
+  {
+    title: "List videos in production",
+    description: "List the C5 and C3 videos that have a production record, newest first, with the state each one is in.",
+    inputSchema: shapes.productions,
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  },
+  () => reply(core.productions()),
+);
+
+server.registerTool(
+  "flow_c5_sheets",
+  {
+    title: "Draw the cast, threat and base sheets",
+    description: "Queue the video's reference sheets as free Flow images, from the sheet prompts saved in its production record. For C5 the mascot is the channel's own picture and never redrawn; C3 videos have no mascot. Use flow_wait for the files.",
+    inputSchema: shapes.c5_sheets,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  },
+  (args) => reply(core.c5_sheets(args)),
+);
+
+server.registerTool(
+  "flow_c5_stills",
+  {
+    title: "Draw the scene stills",
+    description: "Queue the beat stills from the saved still prompts, free. By default one Flow Agent batch per chapter, with the mascot (C5 only), characters, threat and base sheets attached as references so every still stays on-model; still N is saved as stills/scene-NN. Use flow_wait for the files.",
+    inputSchema: shapes.c5_stills,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  },
+  (args) => reply(core.c5_stills(args)),
+);
+
+server.registerTool(
+  "flow_c5_clips",
+  {
+    title: "Animate the hero beats (spends credits)",
+    description: "Queue one image-to-video clip per hero (★) beat: its still is the exact first frame, its saved clip prompt drives the motion, default Omni 1.1 Flash at 6 s, 720p. SPENDS CREDITS: tell the user the estimated total (number of clips times Flow's quote, about 10 each at 6 s 720p) and pass acknowledge_cost only after they say yes. Each clip is checked against max_credits with Flow's own quote first and skipped if over.",
+    inputSchema: shapes.c5_clips,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  },
+  (args) => reply(core.c5_clips(args)),
+);
+
+server.registerTool(
+  "flow_c5_thumbnails",
+  {
+    title: "Draw the thumbnails",
+    description: "Queue the saved thumbnail prompts as free Flow images, with the mascot (C5 only) and any character or base named in the prompt attached as references. Headlines are added in editing, never drawn in.",
+    inputSchema: shapes.c5_thumbnails,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  },
+  (args) => reply(core.c5_thumbnails(args)),
+);
+
+server.registerTool(
+  "flow_voiceover",
+  {
+    title: "Record the whole voiceover and time every beat",
+    description: "Speak the saved script in the user's own cloned voice (OpenVoice, free, the default once it is set up on this computer; a C3 video uses the C3 recording in channel/c3), the channel's ElevenLabs voice (engine 'elevenlabs', the other option; uses the user's ElevenLabs characters, no Flow credits) or a free Google AI Studio voice, in a few long takes, join them into voice/narration.wav, and work out when every beat is spoken (ElevenLabs reports each word's time itself; for OpenVoice and Google, whisper.cpp word times when installed, otherwise the voice's own pauses). Never ask for or handle the keys: the user saves them in the panel. The CapCut build is cut to these times. Re-running only re-records takes whose text changed.",
+    inputSchema: shapes.voiceover,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+  },
+  (args) => reply(patient("flow_voiceover", core.voiceover(args))),
+);
+
+server.registerTool(
+  "flow_capcut_projects",
+  {
+    title: "List CapCut projects",
+    description: "List the CapCut desktop projects on this computer, whether CapCut is open right now, and the sound folder the build will use.",
+    inputSchema: shapes.capcut_projects,
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  },
+  () => reply(core.capcut_projects()),
+);
+
+server.registerTool(
+  "flow_capcut_build",
+  {
+    title: "Build the CapCut timeline",
+    description:
+      "Write the whole edit into a CapCut project's files: stills and hero clips on the main track cut to the voiceover's beat times with slow push, pan and pull moves (a hero beat longer than its clip holds its own still first, then hands over to the clip), the voiceover, a cut to white after the cold open, music per chapter (crossfading between tracks), ambience and sound effects matched by name to the SOUND cues. Sounds come from Claude's own library, synthesised in code and free (made on first use), and from the user's sound folder, whose files win when both fit. Never use computer use or open CapCut for an edit: this tool writes the project files. day markers and ledger numbers as text, and captions from the voiceover's word times (C3 videos: highlight captions on a 9:16 canvas; C5 long-form: none, the voiceover step wrote voice/subtitles.srt for YouTube). CapCut must be CLOSED. The project's previous file is backed up first (flow_capcut_restore puts it back), and the build replaces the project's whole timeline. Returns what was placed and every cue that had no matching sound file.",
+    inputSchema: shapes.capcut_build,
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+  },
+  (args) => reply(patient("flow_capcut_build", core.capcut_build(args))),
+);
+
+server.registerTool(
+  "flow_capcut_short",
+  {
+    title: "Build a Short in CapCut",
+    description:
+      "Make one of a C5 video's saved Shorts (picked with the branding) as its own vertical CapCut project: its run of beats from the same voiceover, the stills and hero clips filling a 9:16 frame with slow pans, that stretch's music, ambience and effects, its hook line at the top for the first seconds, and highlight captions (the spoken word lit up). The project '<main project> Short <n>' is made as a copy of the video's main CapCut project the first time (CapCut's drafts list is backed up first); later runs rebuild its timeline. Free. CapCut must be CLOSED. Never use computer use or open CapCut.",
+    inputSchema: shapes.capcut_short,
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+  },
+  (args) => reply(patient("flow_capcut_short", core.capcut_short(args))),
+);
+
+server.registerTool(
+  "flow_capcut_restore",
+  {
+    title: "Undo a CapCut build",
+    description: "Put a CapCut project back exactly as it was before the last flow_capcut_build (or before a named backup). CapCut must be closed.",
+    inputSchema: shapes.capcut_restore,
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+  },
+  (args) => reply(core.capcut_restore(args)),
 );
 
 await server.connect(new StdioServerTransport());

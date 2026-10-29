@@ -13,6 +13,8 @@ export interface FlowState {
   plan?: string;
   credits_remaining?: number;
   composer?: string;
+  // The signed-in Google account, read from the account panel (any email address shown there).
+  account?: string;
   hint?: string;
 }
 
@@ -34,7 +36,9 @@ export async function getFlowState(detailed = false): Promise<FlowState> {
   else if (!inProject) state.hint = "Signed in, but no project is open. Open or create a project in the Flow Chrome window.";
   else if (detailed) {
     state.plan = await page.getByRole("button", { name: "Account details" }).innerText().then((t) => t.trim().split("\n")[0], () => undefined);
-    state.credits_remaining = await readCredits(page).catch(() => undefined);
+    const panel = await readAccountPanel(page).catch(() => undefined);
+    state.credits_remaining = panel?.credits;
+    state.account = panel?.account;
     state.composer = await settingsTrigger(page).innerText().then((t) => t.replace(/\s+/g, " ").trim(), () => undefined);
   }
   return state;
@@ -87,7 +91,13 @@ async function closeAgentSettings(page: Page): Promise<void> {
 }
 
 // The balance only shows inside the account panel. That panel also holds "Sign out": never touch anything else in it.
+// While it is open, the page's text is also read for the signed-in account's email address: C3 and C5 run on two
+// different Google accounts (the user's rule, 2026-10-29) and the C3 connector refuses to work on the C5 one.
 async function readCredits(page: Page): Promise<number | undefined> {
+  return (await readAccountPanel(page)).credits;
+}
+
+async function readAccountPanel(page: Page): Promise<{ credits?: number; account?: string }> {
   await dismissOverlays(page);
   await scrollToTop(page);
   await page.getByRole("button", { name: "Account details" }).click({ timeout: 5000 });
@@ -95,7 +105,9 @@ async function readCredits(page: Page): Promise<number | undefined> {
   try {
     await link.waitFor({ state: "visible", timeout: 5000 });
     const n = Number((await link.innerText()).replace(/[^\d]/g, ""));
-    return Number.isNaN(n) ? undefined : n;
+    const text = await page.locator("body").innerText().catch(() => "");
+    const account = text.match(/[\w.+-]+@[\w-]+(\.[\w-]+)+/)?.[0]?.toLowerCase();
+    return { credits: Number.isNaN(n) ? undefined : n, account };
   } finally {
     await dismissOverlays(page);
     await pause(page, 300);
@@ -148,17 +160,49 @@ const mediaTile = (page: Page, id: string) =>
 
 // A failed generation becomes a <flow-error-tile> ("Failed ... You have not been charged") with Flow's own Retry
 // button. Old failures can sit anywhere in the grid, so only error tiles above the first already-known tile count.
-export async function newErrorTiles(page: Page, known: Iterable<string>): Promise<number> {
-  return page.evaluate(([ids, js]: [string[], string]) => {
+// That boundary must be a tile with a real media id, never a title: a video has no id until it finishes, and Flow
+// gives a re-run of the same prompt the same short title, so a new pending or failed clip carried the title of the
+// old failed tile below it and was taken for it (2026-10-27: a failed clip waited out the full 12 minutes). Old error
+// tiles above that boundary are counted once before the run (`baseline`) and subtracted.
+export type ErrorTiles = { count: number; messages: string[] };
+
+export async function errorTilesAbove(page: Page, known: Iterable<string>): Promise<ErrorTiles> {
+  return page.evaluate((ids: string[]) => {
     const seen = new Set(ids);
-    let errors = 0;
+    const messages: string[] = [];
+    const words = (el: Element | null) => (el?.textContent ?? "").replace(/\s+/g, " ").replace(/Track status\s*here/i, "").trim();
     for (const tile of document.querySelectorAll("flow-grid-tile-container")) {
-      const id = (eval(js) as (t: Element) => string | undefined)(tile);
+      const error = tile.querySelector("flow-error-tile");
+      if (error) {
+        messages.push([words(error.querySelector(".error-message-text")), words(error.querySelector(".disclaimer-message"))].filter(Boolean).join(" "));
+        continue;
+      }
+      const media = tile.querySelector("img[data-media-id], video[data-media-id], img[src], video[src]");
+      const id = media && (media.getAttribute("data-media-id") || media.getAttribute("src")?.match(/[0-9a-f]{8}-[0-9a-f-]{27}/)?.[0]);
       if (id && seen.has(id)) break;
-      if (tile.querySelector("flow-error-tile")) errors++;
     }
-    return errors;
-  }, [[...known], TILE_ID_JS] as [string[], string]);
+    return { count: messages.length, messages };
+  }, [...known]);
+}
+
+export async function newErrorTiles(page: Page, known: Iterable<string>, baseline = 0): Promise<ErrorTiles> {
+  const found = await errorTilesAbove(page, known);
+  const count = Math.max(0, found.count - baseline);
+  // New tiles come first, so the new failures are the top ones.
+  return { count, messages: found.messages.slice(0, count) };
+}
+
+// Flow's own words for a failure, and what it says about the credits.
+export function failureMessage(failures: number, messages: string[]): string {
+  const said = messages.find(Boolean) ?? "Sorry, this image/video failed to generate";
+  const charge = /not been charged/i.test(said)
+    ? " Nothing was charged."
+    : /refund/i.test(said)
+      ? " Flow says the credits will be refunded (it can take several minutes)."
+      : "";
+  const shown = said.replace(/\s*(You have not been charged|You will be refunded)[^]*$/i, "").trim();
+  const advice = /polic/i.test(said) ? "Reword the prompt (or redraw the first frame) before running it again." : "Try again later or reword the prompt.";
+  return `Flow failed this generation ${failures} time(s) ("${shown}").${charge} ${advice}`;
 }
 
 // Flow's Retry replaces the failed tile with a fresh render of the same prompt and settings, free of charge.
@@ -259,11 +303,21 @@ export async function freshMedia(page: Page, before: string[], kind?: MediaKind)
   return [...new Set(ours.map((t) => t.id!))];
 }
 
-async function waitForNewMedia(page: Page, before: string[], count: number, timeoutMs: number, job?: Job, kind?: MediaKind): Promise<string[]> {
+// `errorsBefore`: error tiles above the first known tile when `before` was taken (see newErrorTiles).
+async function waitForNewMedia(
+  page: Page,
+  before: string[],
+  count: number,
+  timeoutMs: number,
+  job?: Job,
+  kind?: MediaKind,
+  errorsBefore?: number,
+): Promise<string[]> {
   const deadline = Date.now() + timeoutMs;
   let retriesLeft = job?.params.retries ?? 1;
   let failures = 0;
   let seen = "";
+  const baseline = errorsBefore ?? (await errorTilesAbove(page, before)).count;
   while (Date.now() < deadline) {
     await pause(page, 2000);
     const fresh = await freshMedia(page, before, kind);
@@ -282,17 +336,18 @@ async function waitForNewMedia(page: Page, before: string[], count: number, time
       [...document.querySelectorAll("flow-grid-tile-container")].slice(0, 8).map((t) => (t as HTMLElement).innerText.match(/\d+%/)?.[0]).filter(Boolean),
     );
     if (job) job.progress = progress.join(", ") || undefined;
-    const errors = progress.length ? 0 : await newErrorTiles(page, before);
-    if (!errors) continue;
-    failures += errors;
-    if (retriesLeft > 0) {
+    const errors = progress.length ? { count: 0, messages: [] } : await newErrorTiles(page, before, baseline);
+    if (!errors.count) continue;
+    failures += errors.count;
+    // A policy refusal fails the same way on Flow's Retry, so it is reported at once for the user to reword.
+    if (retriesLeft > 0 && !errors.messages.some((m) => /polic/i.test(m))) {
       retriesLeft--;
       if (job) job.progress = "Flow failed, retrying";
       const retried = await retryErrorTile(page, page.locator("flow-grid-tile-container:has(flow-error-tile)").first());
       if (retried) continue;
     }
     if (fresh.length) return fresh;
-    throw new Error(`Flow failed this generation ${failures} time(s) ("Sorry, this image/video failed to generate"). Nothing was charged. Try again later or reword the prompt.`);
+    throw new Error(failureMessage(failures, errors.messages));
   }
   throw new Error(`Timed out after ${Math.round(timeoutMs / 1000)}s waiting for Flow to finish.`);
 }
@@ -305,6 +360,17 @@ async function openSettings(page: Page): Promise<void> {
     await probe.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
   }
   if (!(await probe.isVisible().catch(() => false))) throw new Error("Could not open Flow's generation settings popover.");
+}
+
+// The composer's settings chip reads e.g. "Nano Banana 2.1 x1", so when the radios are missing but the chip already
+// shows the wanted count, nothing needs changing.
+async function pickCount(page: Page, n: number): Promise<void> {
+  const radio = page.getByRole("radio", { name: `x${n}`, exact: true }).first();
+  if (!(await radio.isVisible().catch(() => false))) {
+    const chip = await settingsTrigger(page).innerText().catch(() => "");
+    if (new RegExp(`\\bx${n}\\b`).test(chip)) return;
+  }
+  await pickRadio(page, `x${n}`);
 }
 
 async function pickRadio(page: Page, name: string | RegExp): Promise<void> {
@@ -367,10 +433,15 @@ async function applySettings(page: Page, job: Job): Promise<number> {
   if (s.type === "video") await pickRadio(page, framesMode ? "Frames" : "Ingredients");
   if (s.aspect_ratio) await pickRadio(page, s.aspect_ratio);
   const model = s.type === "image" && LEGACY_IMAGE_MODEL.test(s.model ?? "") ? LATEST_IMAGE_MODEL : s.model;
-  if (model) await pickModel(page, model);
+  if (model) {
+    await pickModel(page, model);
+    // Choosing from the model menu can close the settings popover, and then the x1-x4 radios are not on the page
+    // ("Flow has no "x1" option", Tanya's first run 2026-10-26). Reopen it; this does nothing when it is still open.
+    await openSettings(page);
+  }
   if (s.type === "video" && s.resolution) await pickRadio(page, new RegExp(`^${s.resolution}`));
   if (s.type === "video" && s.duration) await pickRadio(page, `${s.duration}s`);
-  await pickRadio(page, `x${s.variants ?? 1}`);
+  await pickCount(page, s.variants ?? 1);
   await pause(page, 600);
   const costText = await page.getByRole("link", { name: /credits?$/ }).innerText();
   const cost = Number(costText.match(/\d+/)?.[0] ?? NaN);
@@ -464,13 +535,20 @@ export async function attachAsset(page: Page, opener: Locator, assetName: string
   await pause(page, 500);
 }
 
+// Typing "@" in Flow's prompt box opens its asset picker, and every key after it goes into the picker's search box
+// instead (seen on Tanya's first run, 2026-10-26: "MASCOT LOCK @YOU" -> the rest of the prompt in the search bar and
+// a job stuck waiting for Start generation). The engine's lock handles (@YOU, @ROOMMATE) are only names, so drop the "@".
+export function forComposer(text: string): string {
+  return text.replace(/\s*\n+\s*/g, " ").replace(/@(?=[\p{L}\p{N}_])/gu, "").replace(/@/g, " at ").replace(/ {2,}/g, " ").trim();
+}
+
 async function typePrompt(page: Page, prompt: string): Promise<void> {
   const box = page.locator(".ProseMirror");
   await box.click();
   await page.keyboard.press("ControlOrMeta+a");
   await page.keyboard.press("Delete");
   // Enter submits in Flow, so the prompt goes in as a single line.
-  await page.keyboard.type(prompt.replace(/\s*\n+\s*/g, " ").trim(), { delay: 8 });
+  await page.keyboard.type(forComposer(prompt), { delay: 8 });
   await pause(page, 500);
 }
 
@@ -817,10 +895,11 @@ export async function runGeneration(job: Job): Promise<string[]> {
   if (!(await start.isEnabled())) throw new Error("Flow's Start generation button is disabled; the prompt or inputs were not accepted.");
   await scrollToTop(page);
   const before = await mediaIds(page);
+  const errorsBefore = (await errorTilesAbove(page, before)).count;
   await start.click();
 
   const variants = s.variants ?? 1;
-  const fresh = await waitForNewMedia(page, before, variants, s.type === "image" ? IMAGE_TIMEOUT_MS : VIDEO_TIMEOUT_MS, job, s.type === "image" ? "image" : "video");
+  const fresh = await waitForNewMedia(page, before, variants, s.type === "image" ? IMAGE_TIMEOUT_MS : VIDEO_TIMEOUT_MS, job, s.type === "image" ? "image" : "video", errorsBefore);
   job.progress = undefined;
 
   mkdirSync(s.output_dir, { recursive: true });
@@ -977,7 +1056,7 @@ export async function editCharacter(name: string, change?: string, job?: Job): P
     // The character editor always draws a wide 16:9 picture (1376x768), whatever shape the portrait was. Told only "make
     // his coat red", it filled the frame with three Pips side by side (2026-10-02), so every edit pins a single figure.
     const told = `${change.replace(/\s*\n+\s*/g, " ").trim().replace(/[.\s]*$/, ".")} Exactly one ${name} in the picture: never add copies of ${name} or extra poses side by side.`;
-    await page.keyboard.type(told, { delay: 8 });
+    await page.keyboard.type(forComposer(told), { delay: 8 });
     await pause(page, 600);
     const start = page.getByRole("button", { name: "Start generation" });
     if (!(await start.isEnabled())) throw new Error("Flow did not accept the change (Start generation stayed disabled).");
@@ -1271,7 +1350,7 @@ export async function runEdit(job: Job): Promise<string[]> {
   await box.click();
   await page.keyboard.press("ControlOrMeta+a");
   await page.keyboard.press("Delete");
-  const prompt = s.prompt.replace(/\s*\n+\s*/g, " ").trim();
+  const prompt = forComposer(s.prompt);
   await page.keyboard.type(prompt, { delay: 8 });
   await pause(page, 600);
   const start = page.getByRole("button", { name: "Start generation" });
@@ -1471,7 +1550,7 @@ async function agentRound(
     : `Generate exactly ${indexes.length} separate images, one image per scene, in scene order`;
   const ask = `${lead}. Images only, never video. ${aspect} aspect ratio. Do not ask questions, generate them now.${legend} ${script}`;
   await page.locator(".ProseMirror").first().click();
-  await page.keyboard.insertText(ask);
+  await page.keyboard.insertText(forComposer(ask));
   await pause(page, 800);
   const start = page.getByRole("button", { name: "Start generation" });
   if (!(await start.isEnabled())) throw new Error("Flow's agent did not accept the script (Start generation stayed disabled).");
@@ -1623,6 +1702,7 @@ export async function runContinue(job: Job): Promise<string[]> {
         ` ${s.prompt}`,
     );
     const before = await mediaIds(page);
+    const errorsBefore = (await errorTilesAbove(page, before)).count;
     job.progress = "generating";
     await page.getByRole("button", { name: "Start generation" }).click();
 
@@ -1645,7 +1725,7 @@ export async function runContinue(job: Job): Promise<string[]> {
       break;
     }
 
-    const fresh = await waitForNewMedia(page, before, 1, VIDEO_TIMEOUT_MS, job, "video");
+    const fresh = await waitForNewMedia(page, before, 1, VIDEO_TIMEOUT_MS, job, "video", errorsBefore);
     job.progress = undefined;
     mkdirSync(s.output_dir, { recursive: true });
     const saved = await downloadMedia(page, fresh[0], join(s.output_dir, s.file_stem), s.download_quality);
@@ -1665,6 +1745,8 @@ export async function runContinue(job: Job): Promise<string[]> {
   }
 }
 
+const UPLOADED_REFS = new Map<string, string>();
+
 export async function runAgentBatch(job: Job): Promise<string[]> {
   const state = await getFlowState();
   if (!state.signedIn || !state.inProject) throw new Error(state.hint);
@@ -1683,13 +1765,22 @@ export async function runAgentBatch(job: Job): Promise<string[]> {
   let agentProblem = "";
   try {
     // References are uploaded once with readable names (the agent sees them), before Agent mode hides the upload menu.
+    // A file already uploaded by an earlier batch in this run is attached by its Flow title instead of uploaded again, so
+    // a video made chapter by chapter does not fill the project with copies of the same reference sheets.
     if (s.agent_refs?.length && !s.agent_ref_assets?.length) {
       await setAgentMode(page, false);
       const assets: string[] = [];
       for (const [k, r] of s.agent_refs.entries()) {
+        const known = r.image.startsWith(ASSET_PREFIX) ? undefined : UPLOADED_REFS.get(`${r.image}|${statSync(r.image).mtimeMs}`);
+        if (known) {
+          assets.push(known);
+          continue;
+        }
         step(job, `uploading reference ${k + 1} of ${s.agent_refs.length} (${r.name})`);
         const label = r.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 24) || `ref${k + 1}`;
-        assets.push(await uploadAsset(page, job, r.image, label));
+        const title = await uploadAsset(page, job, r.image, label);
+        if (!r.image.startsWith(ASSET_PREFIX)) UPLOADED_REFS.set(`${r.image}|${statSync(r.image).mtimeMs}`, title);
+        assets.push(title);
       }
       s.agent_ref_assets = assets;
     }

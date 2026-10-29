@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { promisify } from "node:util";
 
+import { highpass, normalise, readWav, writeWav } from "./audio.js";
 import { FFMPEG_HINT, IS_WIN, powershell, psQuote } from "./platform.js";
 
 const run = promisify(execFile);
@@ -118,6 +119,13 @@ export async function speakLocally(text: string, voice: string, target: string):
     }
   } else {
     await run(SAY, ["-v", voice, "-r", "168", "-o", raw, text]);
+  }
+  // Windows speech is already WAV: a WAV target is cleaned and levelled in plain code, with no FFmpeg.
+  if (IS_WIN && /\.wav$/i.test(target)) {
+    const clean = normalise(highpass(readWav(raw)));
+    rmSync(raw, { force: true });
+    writeWav(target, clean);
+    return { output: target, duration: clean.channels[0].length / clean.rate };
   }
   await run(FFMPEG, ["-y", "-i", raw, "-af", "highpass=f=80,acompressor=threshold=-18dB:ratio=3:attack=5:release=120,loudnorm=I=-16:TP=-1.5:LRA=11", "-ar", "48000", "-ac", "2", target]);
   rmSync(raw, { force: true });

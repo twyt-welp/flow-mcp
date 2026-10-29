@@ -1,7 +1,8 @@
 import { execFile } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
+import { fromPcm16, highpass, normalise, writeWav } from "./audio.js";
 import { HOME_DIR } from "./chrome.js";
 
 const run = promisify(execFile);
@@ -91,15 +92,23 @@ export async function speakWithGemini(text: string, voice: string, target: strin
 
   // The audio comes back as raw signed 16-bit PCM, so the sample rate has to come from the mime type.
   const rate = Number(part.inlineData.mimeType?.match(/rate=(\d+)/)?.[1] ?? 24000);
+  const pcm = Buffer.from(part.inlineData.data, "base64");
+  // A WAV target is written in plain code, so the C5 voiceover needs nothing installed. Only other formats (the older
+  // pipeline's .m4a) still go through FFmpeg.
+  if (/\.wav$/i.test(target)) {
+    const clean = normalise(highpass(fromPcm16(pcm, rate)));
+    writeWav(target, clean);
+    return { output: target, duration: clean.channels[0].length / rate };
+  }
   const raw = target.replace(/\.\w+$/, "") + ".pcm";
-  writeFileSync(raw, Buffer.from(part.inlineData.data, "base64"));
+  writeFileSync(raw, pcm);
   await run(FFMPEG, [
     "-y", "-f", "s16le", "-ar", String(rate), "-ac", "1", "-i", raw,
     "-af", "highpass=f=80,loudnorm=I=-16:TP=-1.5:LRA=11", "-ar", "48000", "-ac", "2", target,
   ]);
   const { stdout } = await run("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", target]);
   const duration = Number(stdout.trim());
-  writeFileSync(raw, "");
-  await run("rm", ["-f", raw]).catch(() => {});
+  // rmSync, not the `rm` command: Windows has no `rm`, so the raw take was left behind there.
+  rmSync(raw, { force: true });
   return { output: target, duration };
 }

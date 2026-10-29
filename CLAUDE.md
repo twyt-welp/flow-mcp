@@ -9,6 +9,12 @@ OmniFlow (lingoflow.pro/omniflow), using subscription credits instead of the API
   `src/remote.ts` RemoteCore (used when another process owns port 8787) · `src/index.ts` MCP tools · `src/studio.ts` standalone panel
 - `studio/index.html` Studio UI (single file, vanilla JS, mobile-first) · `src/chain.ts`, `src/assemble.ts` ffmpeg ·
   `src/techniques.ts` presets · `src/playbook.ts` guidance returned by `flow_status`
+- C5 Reborn pipeline: `src/production.ts` per-video record + file layout · `src/c5.ts` turns it into Flow jobs ·
+  `src/voiceover.ts` whole-script Gemini voiceover + beat timing (whisper words, else the voice's own pauses) ·
+  `src/audio.ts` WAV in/out + media lengths/sizes from file headers (the C5 path needs NO ffmpeg) ·
+  `src/sound.ts` Claude's procedural sound library (sfx, ambience, music moods) written once to `_channel/sound/`;
+  bump VERSION when a recipe changes ·  `src/capcut.ts` writes CapCut 9.6 draft JSON
+  (templates in `src/capcut-template.ts`, captured from a draft CapCut saved itself) · `skills/c5-reborn/` the skill
 - Test: `node scripts/e2e.mjs <project> '<scenes json>'` (spends credits unless scenes are images)
 
 ## Rules
@@ -355,6 +361,10 @@ The preview tool could not read the project while it lived in ~/Desktop; check t
   message if it stays foreign. Verified: the Flow tab put into Spanish, then a free still through a test MCP ->
   switched to English, generated and downloaded (0 credits, 39 s).
 
+- DUNE LOOK (2026-10-26, Tanya picked it from a clickable preview of six calm themes): one theme only, warm espresso
+  dark (tokens in :root), Inter body + Newsreader headings, 1px borders, no uppercase or noise, steps as a left sidebar
+  (.shell grid) on wide screens and a scrolling strip on phones, Dashboard tab first. The calm overrides sit in the
+  LAST <style> block; new rules must come after them.
 - COMPACT STUDIO (2026-10-13, the user found it "too big and bulky"): one density pass over the CSS, same look (stripe,
   display font, orange tally, button styles). Floors kept on purpose: body and input text >= 16 px (iOS zooms into
   smaller inputs; the global mobile-first rule), buttons and segments >= 38-46 px tall. Title on one line, 12 px
@@ -412,6 +422,24 @@ The preview tool could not read the project while it lived in ~/Desktop; check t
   the start.) freshMedia now counts a video tile without its thumbnail (or a <video>) as busy, and waitForNewMedia
   takes title-tracked tiles only once the same titles show on two polls running. Same clip with the fix: done in
   48 s, renamed SettleTest-scene-01, 4.0 s file downloaded.
+- FAILED CLIP WAITED 12 MINUTES (2026-10-27, C5 hero clip, job 2db274b5): Flow showed a Failed tile at ~8 % while
+  flow_wait said "running" until the 720 s timeout. Cause, watched live on the next run of the same prompt: a video
+  tile has no media id until its thumbnail lands, so TILE_ID_JS names it "title:<Flow's short title>", and Flow gives a
+  re-run of the same prompt the SAME short title ("Character enduring extreme cold …" while rendering, identical to
+  the earlier failed tile below it). newErrorTiles stopped at the first "known" id, which was that title, so the new
+  failure was never counted. Now the boundary is the first tile with a REAL media id (data-media-id / uuid in src)
+  that was in `before`; error tiles are never the boundary, and the error tiles already above it when `before` is
+  taken (errorTilesAbove, the `errorsBefore` baseline) are subtracted. Video failed tiles look like the image ones:
+  `flow-video-tile` > `flow-error-tile`, but the aria-label is Flow's short title (not empty), no img. This one was a
+  POLICY refusal: `.error-message-text` "This prompt might violate our policies about generating harmful content
+  related to minors. Please try a different prompt...", `.disclaimer-message` "You will be refunded for this
+  generation. It may take several minutes..." (credits read 990 before and after). The job error now quotes Flow's
+  own message and says "Nothing was charged" only when Flow says "not been charged" ("will be refunded" otherwise),
+  and a policy refusal skips Flow's Retry (it fails the same way) so the user can reword or redraw at once.
+  Verified on the live grid with no credits spent: the old rule counted 0 new failures, the new one 1 with that
+  message; a job starting on the current grid counts 0, and a snapshot with only id-less tiles absorbs both old
+  failures in the baseline. Not yet seen end to end on a paid run. retryNewErrorTiles (agent image batches) still
+  uses the old boundary; image tiles carry data-media-id and failed image tiles have an empty title, so it is unaffected.
 - RETRY ONLY THE FAILED IMAGES (2026-10-18, the user's request). A batch that ends "done" with some scenes still
   failed (after the agent was asked again and the one-by-one route) now records job.failed_scenes (scene numbers).
   flow_retry on such a job queues a NEW agent batch of just those scenes with agent_numbers, so they save as scene-07,

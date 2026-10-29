@@ -39,6 +39,18 @@ export class RemoteCore implements Core {
   caption_preview = (a: unknown) => call("caption_preview", a);
   captions = (a: unknown) => call("captions", a);
   caption_setup = () => call("caption_setup", {});
+  productions = () => call("productions", {});
+  production = (a: unknown) => call("production", a);
+  c5_sheets = (a: unknown) => call("c5_sheets", a);
+  c5_stills = (a: unknown) => call("c5_stills", a);
+  c5_clips = (a: unknown) => call("c5_clips", a);
+  c5_thumbnails = (a: unknown) => call("c5_thumbnails", a);
+  voiceover = (a: unknown) => call("voiceover", a);
+  capcut_projects = () => call("capcut_projects", {});
+  capcut_build = (a: unknown) => call("capcut_build", a);
+  capcut_short = (a: unknown) => call("capcut_short", a);
+  capcut_restore = (a: unknown) => call("capcut_restore", a);
+  settings = (a: unknown) => call("settings", a);
 
   // Long waits are split up so no single HTTP request outlives fetch's header timeout.
   async wait(a: { job_ids?: string[]; timeout_seconds: number }): Promise<unknown> {

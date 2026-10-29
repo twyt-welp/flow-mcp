@@ -1,15 +1,23 @@
-import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { z } from "zod";
 import { assemble, localVoices, speakLocally, voiceTrack } from "./assemble.js";
+import { elevenKey, elevenVoice, saveElevenKey, saveElevenVoice, speakWithElevenLabs } from "./elevenlabs.js";
 import { GEMINI_VOICES, geminiKey, saveGeminiKey, speakWithGemini } from "./gemini.js";
+import { openVoiceReady, speakWithOpenVoice } from "./openvoice.js";
 import { extractLastFrame } from "./chain.js";
 import { burnCaptions, captionedName, captionSetup, previewCaptions, transcribe } from "./captions.js";
 import { characterLook, createCharacter, downloadAsset, trashAsset, editCharacter, getFlowState, listAssets, listCharacters, rememberCharacter, runAgentBatch, runContinue, runEdit, runGeneration } from "./flow.js";
 import { JobQueue, type Job } from "./queue.js";
 import { BIN, COMPUTER, IS_MAC, IS_WIN, moveToBin } from "./platform.js";
 import { TECHNIQUES, techniqueById } from "./techniques.js";
+import { HOME_DIR } from "./chrome.js";
+import { channelDir, planClips, planSheets, planStills, planThumbnails, sheetPath } from "./c5.js";
+import { buildCapcut, capcutRunning, DRAFTS_ROOT, duplicateCapcut, listCapcutProjects, restoreCapcut } from "./capcut.js";
+import { clipFile, engineOf, listProductions, productionShape, progress, readProduction, stillFile, thumbFile, writeProduction, type Production } from "./production.js";
+import { recordVoiceover } from "./voiceover.js";
+import { ensureSoundLibrary, SOUND_NAMES } from "./sound.js";
 
 export const OUTPUT_ROOT = process.env.FLOW_MCP_OUTPUT ?? join(homedir(), "flow-mcp-out");
 const words = (s: string) => s.split(/[^a-z0-9]+/i).filter((w) => w.length > 3).map((w) => w.toLowerCase());
@@ -177,10 +185,10 @@ export const shapes = {
   narrate: {
     project: z.string().min(1).describe("Folder for the narration audio."),
     engine: z
-      .enum(["gemini", "mac"])
+      .enum(["elevenlabs", "openvoice", "gemini", "mac"])
       .default("gemini")
       .describe(
-        "'gemini' uses Google AI Studio's text-to-speech - the same voices Flow has, free on the AI Studio tier, no length limit, needs a key in ~/.flow-mcp/gemini-key. 'mac' uses a voice installed on this computer (macOS voices on a Mac, the built-in speech voices on Windows): free, instant, no key.",
+        "'openvoice' speaks in the user's own cloned voice (OpenVoice V2 on this computer, free; voice is ignored). 'elevenlabs' uses the channel's own ElevenLabs voice (key and voice ID saved in Flow Studio's Voice step; voice = the voice ID, default the saved one). 'gemini' uses Google AI Studio's text-to-speech - the same voices Flow has, free on the AI Studio tier, no length limit, needs a key in ~/.flow-mcp/gemini-key. 'mac' uses a voice installed on this computer (macOS voices on a Mac, the built-in speech voices on Windows): free, instant, no key.",
       ),
     text: z.string().min(1).max(400).describe("The line to speak. About 20 words fits 8 s, 30 words fits 12 s; anything longer needs a longer take."),
     voice: z.string().min(1).default("Charon").describe("Voice name from flow_voices, e.g. Charon (informative), Aoede (breezy), Gacrux (mature) for Google; Zoe or Samantha for macOS."),
@@ -221,7 +229,11 @@ export const shapes = {
       .describe("Skip the guard that refuses to run when Flow already holds a fresh-looking continuation of this clip. Only pass it when you have checked the grid and genuinely want another paid take."),
   },
   trash: { name: z.string().min(1).describe("Exact title of the item to move to Flow's Trash, as listed by flow_assets.") },
-  set_key: { key: z.string().min(1).max(200) },
+  set_key: {
+    service: z.enum(["gemini", "elevenlabs"]).default("gemini"),
+    key: z.string().max(200).optional(),
+    voice_id: z.string().max(60).optional().describe("ElevenLabs only: the channel's voice ID."),
+  },
   discard: { path: z.string().min(1).describe("A saved film, still, narration or whole project folder inside the films folder, to move to this computer's bin (Mac Trash, Windows Recycle Bin).") },
   outputs: {},
   characters: {},
@@ -261,6 +273,84 @@ export const shapes = {
     voice: z.string().optional().describe("Flow voice name, e.g. 'Charon' (male, informative) or 'Aoede' (female, breezy)."),
   },
   techniques: { category: z.enum(["camera", "product", "transition", "image"]).optional() },
+  productions: {},
+  production: {
+    video: z.string().min(1).describe("The video's folder name, e.g. 'RebornFreeze'. A new name starts a new video."),
+    patch: productionShape
+      .optional()
+      .describe("Fields to save. Top-level fields replace what was there; `beats` merge by beat number (send just one chapter's beats with their prompts); `settings` and `branding` merge. Leave it out to only read."),
+    replace_beats: z.boolean().optional().describe("Replace the whole beat map instead of merging by number (use when the beat map is redone)."),
+  },
+  c5_sheets: {
+    video: z.string().min(1),
+    ids: z.array(z.string()).optional().describe("Sheet ids to draw (default: every sheet not drawn yet)."),
+    redo: z.boolean().default(false).describe("Draw again even if the sheet exists; the old file is kept beside it."),
+  },
+  c5_stills: {
+    video: z.string().min(1),
+    beats: z.array(z.number().int()).optional().describe("Beat numbers (default: every beat without a still)."),
+    redo: z.boolean().default(false),
+    mode: z
+      .enum(["agent", "one_by_one"])
+      .default("agent")
+      .describe("agent: one fast Flow Agent batch per chapter, with the sheets attached as references. one_by_one: paced single images with up to 3 sheets each; slower, best for redoing a few."),
+  },
+  c5_clips: {
+    video: z.string().min(1),
+    beats: z.array(z.number().int()).optional().describe("Hero beat numbers (default: every hero beat without a clip)."),
+    max_credits: z.number().int().min(0).describe("Per-clip cap: a clip whose Flow quote is higher is skipped and nothing is spent."),
+    acknowledge_cost: z.literal(true).describe("Must be true, and only after the user said yes to the estimated total."),
+    model: z.string().default("Omni 1.1 Flash"),
+    duration: z.union([z.literal(4), z.literal(6), z.literal(8), z.literal(10)]).default(6),
+    resolution: z.enum(["360p", "720p"]).default("720p"),
+    redo: z.boolean().default(false),
+  },
+  c5_thumbnails: {
+    video: z.string().min(1),
+    numbers: z.array(z.number().int()).optional(),
+    redo: z.boolean().default(false),
+  },
+  voiceover: {
+    video: z.string().min(1),
+    engine: z
+      .enum(["elevenlabs", "openvoice", "gemini", "mac"])
+      .optional()
+      .describe("'openvoice' = the user's own cloned voice (free, on this computer). Default: 'openvoice' once it is set up on this computer, else 'elevenlabs' once an ElevenLabs key is saved, else 'gemini'."),
+    voice: z.string().optional().describe("ElevenLabs: a voice ID (default: the channel's saved voice). Google: a voice name (default: the video's saved voice, else Charon)."),
+    style: z.string().max(200).optional().describe("Delivery note, e.g. 'calm, low and tense, like a survival story told at night'."),
+  },
+  capcut_projects: {},
+  capcut_build: {
+    video: z.string().min(1),
+    project: z.string().min(1).optional().describe("CapCut project (folder) name, as listed by flow_capcut_projects. Default: the one saved for this video."),
+    audio_dir: z.string().optional().describe("Folder with the user's sounds: a 'music' subfolder, an 'sfx' subfolder and optionally 'ambience'. Default: the saved one."),
+    music_volume: z.number().min(0).max(1).default(0.3),
+    sfx_volume: z.number().min(0).max(1).default(0.5),
+    ambience_volume: z.number().min(0).max(1).default(0.25),
+    titles: z.boolean().default(true).describe("Day markers on screen at each chapter."),
+    ledger: z.boolean().default(true).describe("Ledger numbers and countdowns from the edit notes."),
+    captions: z
+      .enum(["highlight", "line", "off"])
+      .optional()
+      .describe("Captions drawn from the voiceover's word times. Default: 'highlight' for a C3 video (2-3 big words, the spoken one lit up), 'off' for a C5 long-form video (it gets voice/subtitles.srt for YouTube instead)."),
+  },
+  capcut_short: {
+    video: z.string().min(1),
+    short: z.number().int().min(1).describe("Which of the video's saved shorts (its n)."),
+    project: z.string().min(1).optional().describe("CapCut project for the Short. Default '<main project> Short <n>', made as a copy of the video's main CapCut project when it doesn't exist yet."),
+    audio_dir: z.string().optional(),
+    music_volume: z.number().min(0).max(1).default(0.3),
+    sfx_volume: z.number().min(0).max(1).default(0.5),
+    ambience_volume: z.number().min(0).max(1).default(0.25),
+    captions: z.enum(["highlight", "line", "off"]).default("highlight"),
+  },
+  capcut_restore: {
+    project: z.string().min(1),
+    backup: z.string().optional().describe("Backup file name; default the newest flow-mcp backup."),
+  },
+  settings: {
+    audio_dir: z.string().optional().describe("Folder holding the music, sfx and ambience folders."),
+  },
 };
 
 type Args<K extends keyof typeof shapes> = z.infer<z.ZodObject<(typeof shapes)[K]>>;
@@ -307,7 +397,26 @@ export interface Core {
   caption_preview(a: Args<"caption_preview">): Promise<unknown>;
   captions(a: Args<"captions">): Promise<unknown>;
   caption_setup(): Promise<unknown>;
+  productions(): Promise<unknown>;
+  production(a: Args<"production">): Promise<unknown>;
+  c5_sheets(a: Args<"c5_sheets">): Promise<unknown>;
+  c5_stills(a: Args<"c5_stills">): Promise<unknown>;
+  c5_clips(a: Args<"c5_clips">): Promise<unknown>;
+  c5_thumbnails(a: Args<"c5_thumbnails">): Promise<unknown>;
+  voiceover(a: Args<"voiceover">): Promise<unknown>;
+  capcut_projects(): Promise<unknown>;
+  capcut_build(a: Args<"capcut_build">): Promise<unknown>;
+  capcut_short(a: Args<"capcut_short">): Promise<unknown>;
+  capcut_restore(a: Args<"capcut_restore">): Promise<unknown>;
+  settings(a: Args<"settings">): Promise<unknown>;
 }
+
+const SETTINGS_FILE = join(HOME_DIR, "settings.json");
+type Settings = { audio_dir?: string };
+const readSettings = (): Settings => (existsSync(SETTINGS_FILE) ? (JSON.parse(readFileSync(SETTINGS_FILE, "utf8")) as Settings) : {});
+// Where the user's own music and effects live. The first time, a youtube-studio/audio folder in the home folder is
+// picked up by itself, since that is where this channel keeps them.
+const audioDir = (s = readSettings()) => s.audio_dir ?? process.env.FLOW_MCP_AUDIO ?? [join(homedir(), "youtube-studio", "audio")].find((d) => existsSync(d));
 
 // Flow's own voices: still offered when giving a character a voice, but narration no longer goes through Flow.
 export const VOICES = [
@@ -351,10 +460,27 @@ export class LocalCore implements Core {
 
   async status({ detailed }: Args<"status">) {
     const flow = await getFlowState(detailed && !this.queue.busy);
-    return { flow, pacing: this.queue.pausedReason, output_root: OUTPUT_ROOT, jobs: this.queue.list().map(jobView) };
+    if (flow.account) this.account = noteAccount(flow.account);
+    return { flow, connector: CONNECTOR, pacing: this.queue.pausedReason, output_root: OUTPUT_ROOT, jobs: this.queue.list().map(jobView), ...accountCheck(this.account) };
+  }
+
+  // Which Google account this connector's Flow Chrome is signed in to, read once per process.
+  private account?: string;
+
+  // C3 and C5 use different Flow accounts: a connector started with FLOW_MCP_OTHER_HOME (the C3 one points at the
+  // C5 connector's home) refuses to queue anything while signed in to the account that home has recorded.
+  private async guardAccount() {
+    if (!OTHER_HOME) return;
+    if (!this.account && !this.queue.busy) {
+      const flow = await getFlowState(true).catch(() => undefined);
+      if (flow?.account) this.account = noteAccount(flow.account);
+    }
+    const check = accountCheck(this.account);
+    if (check.account_conflict) throw new Error(check.account_conflict);
   }
 
   async generate({ project, scenes }: Args<"generate">) {
+    await this.guardAccount();
     const invalid = scenes.findIndex((s, i) => s.chain_previous && (i === 0 || s.first_frame || s.type === "image"));
     if (invalid >= 0) {
       throw new Error(`Scene ${invalid + 1}: chain_previous needs a preceding video scene in the same call and cannot be combined with first_frame.`);
@@ -645,25 +771,191 @@ export class LocalCore implements Core {
   }
 
   // Panel only: deliberately NOT registered as an MCP tool, so a key typed into Flow Studio never reaches Claude.
-  async set_key({ key }: Args<"set_key">) {
-    return saveGeminiKey(key);
+  async set_key({ service, key, voice_id }: Args<"set_key">) {
+    if (service === "gemini") {
+      if (!key) throw new Error("Paste the key first.");
+      return saveGeminiKey(key);
+    }
+    if (!key && !voice_id) throw new Error("Paste the key or the voice ID first.");
+    const saved = key ? await saveElevenKey(key) : {};
+    return { ...saved, ...(voice_id ? saveElevenVoice(voice_id) : {}) };
   }
 
   async voices() {
     // The panel words itself from these, so a PC never reads "this Mac".
     const place = { computer: COMPUTER, bin: BIN, local_engine: IS_MAC ? "macOS voice" : IS_WIN ? "Windows voice" : "System voice", platform: process.platform };
-    return { gemini: GEMINI_VOICES, gemini_ready: Boolean(geminiKey()), mac: await localVoices(), place };
+    return { gemini: GEMINI_VOICES, gemini_ready: Boolean(geminiKey()), elevenlabs_ready: Boolean(elevenKey()), elevenlabs_voice: elevenVoice() ?? null, openvoice: openVoiceReady(), openvoice_c3: openVoiceReady("c3"), mac: await localVoices(), place };
   }
 
   async narrate({ project, text, voice, engine, style }: Args<"narrate">) {
     const output_dir = projectDir(project);
     mkdirSync(output_dir, { recursive: true });
-    const target = join(output_dir, `${this.nextStem(output_dir, "narration")}.m4a`);
-    const spoken = engine === "mac" ? await speakLocally(text.trim(), voice, target) : await speakWithGemini(text.trim(), voice, target, style);
+    const target = join(output_dir, `${this.nextStem(output_dir, "narration")}.wav`);
+    const spoken =
+      engine === "openvoice"
+        ? await speakWithOpenVoice(text.trim(), target)
+        : engine === "elevenlabs"
+        ? await speakWithElevenLabs(text.trim(), voice === "Charon" ? (elevenVoice() ?? voice) : voice, target).then(({ words, ...r }) => r)
+        : engine === "mac"
+          ? await speakLocally(text.trim(), voice, target)
+          : await speakWithGemini(text.trim(), voice, target, style);
     return { output_dir, credits: 0, engine, voice, ...spoken };
+  }
+
+  /* ---------- C5 Reborn engine: one production record per video ---------- */
+
+  async productions() {
+    return { root: OUTPUT_ROOT, videos: listProductions(OUTPUT_ROOT) };
+  }
+
+  async production({ video, patch, replace_beats }: Args<"production">) {
+    const dir = projectDir(video);
+    const p = patch ? writeProduction(dir, video, patch, replace_beats) : readProduction(dir, video);
+    const files = {
+      sheets: Object.fromEntries((p.sheets ?? []).map((s) => [s.id, sheetPath(OUTPUT_ROOT, dir, s)]).filter(([, f]) => f)),
+      stills: Object.fromEntries((p.beats ?? []).map((b) => [b.n, stillFile(dir, b.n)]).filter(([, f]) => f)),
+      clips: Object.fromEntries((p.beats ?? []).filter((b) => b.hero).map((b) => [b.n, clipFile(dir, b.n)]).filter(([, f]) => f)),
+      thumbs: Object.fromEntries((p.thumbnails ?? []).map((t) => [t.n, thumbFile(dir, t.n)]).filter(([, f]) => f)),
+    };
+    return { dir, channel: channelDir(OUTPUT_ROOT), production: p, progress: progress(dir, p), files, saved: Boolean(patch) };
+  }
+
+  private async queueAll(list: Parameters<JobQueue["add"]>[0][]) {
+    await this.guardAccount();
+    return list.map((params) => jobView(this.queue.add(params)));
+  }
+
+  async c5_sheets({ video, ids, redo }: Args<"c5_sheets">) {
+    const dir = projectDir(video);
+    const jobs = await this.queueAll(planSheets(OUTPUT_ROOT, dir, readProduction(dir, video), ids, redo));
+    return { jobs, note: jobs.length ? "Sheets are free images. The mascot sheet is saved once for the channel and reused by every video." : "Every sheet is drawn already. Pass redo: true to draw one again." };
+  }
+
+  async c5_stills({ video, beats, redo, mode }: Args<"c5_stills">) {
+    const dir = projectDir(video);
+    return { jobs: await this.queueAll(planStills(OUTPUT_ROOT, dir, readProduction(dir, video), beats, redo, mode)), credits: 0 };
+  }
+
+  async c5_clips({ video, beats, max_credits, model, duration, resolution, redo }: Args<"c5_clips">) {
+    const dir = projectDir(video);
+    const plan = planClips(dir, readProduction(dir, video), beats, redo, { max_credits, model, duration, resolution });
+    return { jobs: await this.queueAll(plan.jobs), skipped: plan.skipped, cap_per_clip: max_credits };
+  }
+
+  async c5_thumbnails({ video, numbers, redo }: Args<"c5_thumbnails">) {
+    const dir = projectDir(video);
+    return { jobs: await this.queueAll(planThumbnails(OUTPUT_ROOT, dir, readProduction(dir, video), numbers, redo)), credits: 0 };
+  }
+
+  async voiceover({ video, engine, voice, style }: Args<"voiceover">) {
+    const dir = projectDir(video);
+    const p = readProduction(dir, video);
+    // A C3 video speaks in the C3 recording of the user's voice (channel/c3), a C5 video in the channel's own.
+    const profile = engineOf(p) === "c3" ? "c3" : undefined;
+    const eng = engine ?? (openVoiceReady(profile).ready ? "openvoice" : elevenKey() ? "elevenlabs" : "gemini");
+    const st = style ?? p.settings?.style;
+    if (eng === "elevenlabs") {
+      const id = voice ?? elevenVoice();
+      if (!id) throw new Error("No ElevenLabs voice yet: paste your voice ID in Flow Studio's Voice step (ElevenLabs: Voices -> My Voices -> Copy voice ID).");
+      const timing = await recordVoiceover(dir, p, { engine: eng, voice: id });
+      return { file: timing.file, seconds: timing.total, aligned: timing.aligned, chapters: timing.chapters, beats: timing.beats.length, engine: eng, credits: 0, subtitles: join(dir, "voice", "subtitles.srt"), ...shortCheck(p, timing.total) };
+    }
+    if (eng === "openvoice") {
+      const timing = await recordVoiceover(dir, p, { engine: eng, voice: profile ? `my ${profile.toUpperCase()} voice` : "my voice", profile });
+      return { file: timing.file, seconds: timing.total, aligned: timing.aligned, chapters: timing.chapters, beats: timing.beats.length, engine: eng, credits: 0, subtitles: join(dir, "voice", "subtitles.srt"), ...shortCheck(p, timing.total) };
+    }
+    const v = voice ?? p.settings?.voice ?? "Charon";
+    const timing = await recordVoiceover(dir, p, { engine: eng, voice: v, style: st });
+    writeProduction(dir, video, { settings: { voice: v, style: st } });
+    return { file: timing.file, seconds: timing.total, aligned: timing.aligned, chapters: timing.chapters, beats: timing.beats.length, credits: 0, subtitles: join(dir, "voice", "subtitles.srt"), ...shortCheck(p, timing.total) };
+  }
+
+  async capcut_projects() {
+    return { ...listCapcutProjects(), capcut_open: await capcutRunning(), audio_dir: audioDir() ?? null };
+  }
+
+  async capcut_build({ video, project, audio_dir, ...o }: Args<"capcut_build">) {
+    const dir = projectDir(video);
+    const p = readProduction(dir, video);
+    const name = project ?? p.settings?.capcut_project;
+    if (!name) throw new Error(`Which CapCut project? Pass project (see flow_capcut_projects; CapCut keeps them in ${DRAFTS_ROOT}).`);
+    const sounds = audio_dir ?? audioDir();
+    // Claude's own music, ambience and effects, made in code the first time and kept in the channel folder.
+    const made = ensureSoundLibrary(join(channelDir(OUTPUT_ROOT), "sound"));
+    const c3 = engineOf(p) === "c3";
+    const out = await buildCapcut({ dir, production: p, project: name, audio_dir: sounds, library_dir: made.dir, ...o, captions: o.captions ?? (c3 ? "highlight" : "off"), vertical: c3 });
+    writeProduction(dir, video, { settings: { capcut_project: name } });
+    if (audio_dir) writeFileSync(SETTINGS_FILE, JSON.stringify({ ...readSettings(), audio_dir }, null, 2));
+    return out;
+  }
+
+  // A C5 Short: its run of beats, from the same voiceover, stills and clips, on a 9:16 canvas with highlight captions,
+  // in its own CapCut project copied from the video's main one.
+  async capcut_short({ video, short, project, audio_dir, ...o }: Args<"capcut_short">) {
+    const dir = projectDir(video);
+    const p = readProduction(dir, video);
+    const s = (p.shorts ?? []).find((x) => x.n === short);
+    if (!s) throw new Error(`This video has no Short ${short} saved yet. The writing pass picks them with the branding.`);
+    const main = p.settings?.capcut_project;
+    const name = project ?? (main ? `${main} Short ${short}` : undefined);
+    if (!name) throw new Error("Build the main CapCut edit first (flow_capcut_build): each Short is made as a copy of that project.");
+    const made = main && !project ? await duplicateCapcut(main, name) : { created: false, project: name };
+    const sounds = audio_dir ?? audioDir();
+    const lib = ensureSoundLibrary(join(channelDir(OUTPUT_ROOT), "sound"));
+    const out = await buildCapcut({ dir, production: p, project: name, audio_dir: sounds, library_dir: lib.dir, ...o, titles: true, ledger: true, window: { from: s.from, to: s.to, hook: s.hook }, vertical: true });
+    return { ...out, short: s.n, title: s.title, hashtags: s.hashtags ?? [], project_created: made.created };
+  }
+
+  async capcut_restore({ project, backup }: Args<"capcut_restore">) {
+    return restoreCapcut(project, backup);
+  }
+
+  async settings({ audio_dir }: Args<"settings">) {
+    const cur = readSettings();
+    if (audio_dir !== undefined) {
+      if (audio_dir && !existsSync(audio_dir)) throw new Error(`There's no folder at ${audio_dir}.`);
+      mkdirSync(HOME_DIR, { recursive: true });
+      writeFileSync(SETTINGS_FILE, JSON.stringify({ ...cur, audio_dir: audio_dir || undefined }, null, 2));
+    }
+    const dir = audioDir();
+    const count = (sub: string) => (dir && existsSync(join(dir, sub)) ? readdirSync(join(dir, sub)).filter((f) => /\.(mp3|wav|m4a|aac|ogg|flac|aiff?)$/i.test(f)).length : 0);
+    const library = { dir: join(channelDir(OUTPUT_ROOT), "sound"), music: SOUND_NAMES.music.length, sfx: SOUND_NAMES.sfx.length, ambience: SOUND_NAMES.ambience.length };
+    return { audio_dir: dir ?? null, music: count("music"), sfx: count("sfx"), ambience: count("ambience"), claude_library: library, capcut_drafts: DRAFTS_ROOT };
   }
 
   async techniques({ category }: Args<"techniques">) {
     return TECHNIQUES.filter((t) => !category || t.category === category);
   }
+}
+
+// C3 videos are Shorts kept just under a minute (the user's rule, 2026-10-29): a longer voiceover is flagged before the edit.
+function shortCheck(p: Production, seconds: number) {
+  if (engineOf(p) !== "c3" || seconds <= 58) return {};
+  return { over_short_limit: `The voiceover runs ${seconds.toFixed(1)} s, over the 58 s a C3 Short allows. Shorten the script in the writing pass ("shorten the C3 script"), then record again.` };
+}
+
+// Two connectors can run side by side, one per channel (2026-10-29): C5 on the default home and port, C3 with its own
+// FLOW_MCP_HOME (so its own Chrome profile and Google sign-in), FLOW_MCP_CDP_PORT, FLOW_MCP_PORT and FLOW_MCP_OUTPUT.
+// Each records the account it has seen in its home; FLOW_MCP_OTHER_HOME names the other connector's home to compare.
+const CONNECTOR = process.env.FLOW_MCP_NAME ?? "C5";
+const OTHER_HOME = process.env.FLOW_MCP_OTHER_HOME;
+const ACCOUNT_FILE = (home: string) => join(home, "account.json");
+
+function noteAccount(account: string): string {
+  try {
+    mkdirSync(HOME_DIR, { recursive: true });
+    writeFileSync(ACCOUNT_FILE(HOME_DIR), JSON.stringify({ account, connector: CONNECTOR, seen: new Date().toISOString() }));
+  } catch {}
+  return account;
+}
+
+function accountCheck(account: string | undefined): { account?: string; other_account?: string; account_conflict?: string } {
+  if (!OTHER_HOME) return { account };
+  let other: string | undefined;
+  try {
+    other = (JSON.parse(readFileSync(ACCOUNT_FILE(OTHER_HOME), "utf8")) as { account?: string }).account;
+  } catch {}
+  if (account && other && account === other)
+    return { account, other_account: other, account_conflict: `This ${CONNECTOR} Flow window is signed in to ${account}, the same Google account the other channel uses. Sign this window in to the ${CONNECTOR} account instead (double-click "Sign in to Flow ${CONNECTOR}" in the flow-mcp folder), then try again.` };
+  return { account, other_account: other };
 }
