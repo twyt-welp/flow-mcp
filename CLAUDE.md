@@ -14,8 +14,7 @@ OmniFlow (lingoflow.pro/omniflow), using subscription credits instead of the API
   `src/audio.ts` WAV in/out + media lengths/sizes from file headers (the C5 path needs NO ffmpeg) ·
   `src/sound.ts` Claude's procedural sound library (sfx, ambience, music moods) written once to `_channel/sound/`;
   bump VERSION when a recipe changes ·  `src/capcut.ts` writes CapCut 9.6 draft JSON
-  (templates in `src/capcut-template.ts`, captured from a draft CapCut saved itself) · `skills/c5-reborn/` the writing skill (strong model, never calls Flow) · `skills/c5-flow-run/` the sending skill
-  (cheaper model: sends saved prompts, voiceover, CapCut; never writes prompts) - the user's split, 2026-10-26
+  (templates in `src/capcut-template.ts`, captured from a draft CapCut saved itself) · `skills/c5-reborn/` the skill
 - Test: `node scripts/e2e.mjs <project> '<scenes json>'` (spends credits unless scenes are images)
 
 ## Rules
@@ -423,6 +422,24 @@ The preview tool could not read the project while it lived in ~/Desktop; check t
   the start.) freshMedia now counts a video tile without its thumbnail (or a <video>) as busy, and waitForNewMedia
   takes title-tracked tiles only once the same titles show on two polls running. Same clip with the fix: done in
   48 s, renamed SettleTest-scene-01, 4.0 s file downloaded.
+- FAILED CLIP WAITED 12 MINUTES (2026-10-27, C5 hero clip, job 2db274b5): Flow showed a Failed tile at ~8 % while
+  flow_wait said "running" until the 720 s timeout. Cause, watched live on the next run of the same prompt: a video
+  tile has no media id until its thumbnail lands, so TILE_ID_JS names it "title:<Flow's short title>", and Flow gives a
+  re-run of the same prompt the SAME short title ("Character enduring extreme cold …" while rendering, identical to
+  the earlier failed tile below it). newErrorTiles stopped at the first "known" id, which was that title, so the new
+  failure was never counted. Now the boundary is the first tile with a REAL media id (data-media-id / uuid in src)
+  that was in `before`; error tiles are never the boundary, and the error tiles already above it when `before` is
+  taken (errorTilesAbove, the `errorsBefore` baseline) are subtracted. Video failed tiles look like the image ones:
+  `flow-video-tile` > `flow-error-tile`, but the aria-label is Flow's short title (not empty), no img. This one was a
+  POLICY refusal: `.error-message-text` "This prompt might violate our policies about generating harmful content
+  related to minors. Please try a different prompt...", `.disclaimer-message` "You will be refunded for this
+  generation. It may take several minutes..." (credits read 990 before and after). The job error now quotes Flow's
+  own message and says "Nothing was charged" only when Flow says "not been charged" ("will be refunded" otherwise),
+  and a policy refusal skips Flow's Retry (it fails the same way) so the user can reword or redraw at once.
+  Verified on the live grid with no credits spent: the old rule counted 0 new failures, the new one 1 with that
+  message; a job starting on the current grid counts 0, and a snapshot with only id-less tiles absorbs both old
+  failures in the baseline. Not yet seen end to end on a paid run. retryNewErrorTiles (agent image batches) still
+  uses the old boundary; image tiles carry data-media-id and failed image tiles have an empty title, so it is unaffected.
 - RETRY ONLY THE FAILED IMAGES (2026-10-18, the user's request). A batch that ends "done" with some scenes still
   failed (after the agent was asked again and the one-by-one route) now records job.failed_scenes (scene numbers).
   flow_retry on such a job queues a NEW agent batch of just those scenes with agent_numbers, so they save as scene-07,
@@ -521,32 +538,3 @@ The preview tool could not read the project while it lived in ~/Desktop; check t
 - CAPTIONS WORKFLOW (the user's rule, 2026-10-18): transcribe first, show the words with likely mishearings fixed,
   get the user's OK, THEN make the video once. The playbook and the flow_captions description say so too.
 
-- "@" OPENS FLOW'S ASSET PICKER (Tanya's first run, 2026-10-26): the C5 engine's lock handles ("MASCOT LOCK @YOU")
-  typed into the prompt box opened the asset picker at the "@", the rest of the prompt went into its search bar and
-  the job died waiting for Start generation. Every typed prompt now goes through forComposer() (drops "@" before a
-  name, else " at "). Same run: "Flow has no "x1" option" after the model menu picked Nano Banana 2.1 - choosing a
-  model can close the settings popover, so applySettings reopens it, and pickCount accepts the chip already showing
-  the count. Neither fix has been re-run live yet.
-- CHANNEL MASCOT (2026-10-27, Tanya's own sheet): the mascot picture lives with the code at `channel/sheets/mascot.jpg`
-  (gitignored, the user's art). mascotSheet() finds it after the video's and _channel's sheets and copies it into
-  `<output>/_channel/sheets/` so the panel can show it; withMascot() attaches it to every still and thumbnail even when
-  a record lists no mascot sheet, and planSheets never redraws it, redo or not. engine.md's MASCOT LOCK was rewritten
-  to match the sheet (messy brown hair, full sleeves, off-white hands, flap backpack).
-- ELEVENLABS VOICEOVER (2026-10-27, Tanya's choice over Google): `src/elevenlabs.ts` calls
-  `/v1/text-to-speech/<voice>/with-timestamps?output_format=pcm_24000` (model eleven_multilingual_v2, raw PCM -> WAV in
-  JS, no FFmpeg). The reply times every character, so each take's words are saved as take-NN.words.json and beats are
-  cut at the midpoint between two spoken words (aligned "voice"); whisper/pauses remain the Google fallback. Key in
-  ~/.flow-mcp/elevenlabs-key (panel only, set_key service "elevenlabs"; a TTS-only key is accepted when /v1/user answers
-  401 missing_permissions), channel voice ID in `channel/elevenlabs-voice.txt` (gitignored, beside the mascot).
-  flow_voiceover defaults to ElevenLabs once a key is saved. Tested with a stubbed API only; no real ElevenLabs call yet.
-- OPENVOICE (2026-10-27, Tanya's own cloned voice, free on their RTX 4070 Ti): engine "openvoice" runs
-  `scripts/openvoice_say.py` (MeloTTS EN_NEWEST base voice -> OpenVoice V2 ToneColorConverter) once per take through
-  the Python in `<studio>/openvoice/.venv` with the checkout at `<studio>/openvoice/OpenVoice` (checkpoints_v2 inside),
-  overridable in `channel/openvoice.json`. Reference = `channel/voice-reference.wav` (Tanya's 8.6 min recording; the
-  whole file feeds the VAD segments), speaker embedding cached as `channel/openvoice-se.pth`. No word times, so beats
-  fall back to the voice's pauses. INSTALLED AND VERIFIED on the PC 2026-10-27: uv Python 3.10.22 in openvoice\python,
-  torch 2.5.1+cu121 (CUDA true), the fork at 74a1d14 (-e), MeloTTS 0.1.2, UniDic (526 MB, needed even for English),
-  checkpoints from Hugging Face myshell-ai/OpenVoiceV2 (the S3 link is dead). Pins: faster-whisper 1.0.3 via
-  openvoice\overrides.txt (0.9.0 needs av 10, which fails to compile on Windows) - any reinstall must pass
-  `--override openvoice\overrides.txt`; setuptools 69.5.1 (librosa 0.9.1 needs pkg_resources). First take 63 s (builds
-  openvoice-se.pth), later takes ~26 s, mostly model loading. openvoice_say.py ran unchanged.
