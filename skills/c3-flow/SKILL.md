@@ -1,6 +1,6 @@
 ---
 name: c3-flow
-description: Write a C3 Stickman Explainer video for Google Flow - ideas, researched script, character sheets, beat map, still and hero clip prompts, thumbnail prompts, and afterwards the titles and description - saved for the flow tools to run. Use when the user says "new C3 video", "run the C3 engine", "make a stickman explainer", "write the C3 prompts", "rewrite C3 still N" or "C3 branding". Sending the saved prompts to Flow, the voiceover and the CapCut edit belong to the c3-flow-run skill.
+description: Write a C3 Stickman Explainer video (a vertical Short under a minute) for Google Flow - ideas, researched script, character sheets, beat map, still and hero clip prompts, thumbnail prompts, and afterwards the titles and description - saved for the flow tools to run. Use when the user says "new C3 video", "run the C3 engine", "make a stickman explainer", "write the C3 prompts", "rewrite C3 still N" or "C3 branding". Sending the saved prompts to Flow, the voiceover and the CapCut edit belong to the c3-flow-run skill.
 ---
 
 # C3 Stickman Explainer → Google Flow → CapCut
@@ -8,8 +8,10 @@ description: Write a C3 Stickman Explainer video for Google Flow - ideas, resear
 `engine.md` in this folder is the creative engine: states, STYLE ANCHOR, ACCENT lock, visual safety rules, audio-safe
 word swaps, timing and every prompt format. Read it in full at the start and follow it exactly, except where this file
 overrides it. C3 uses the same `flow` tools as C5 (their names say `c5`, they serve both): what makes a video C3 is
-`engine: "c3"` in its record. A C3 video has no mascot: each video draws its own one or two characters, and the
-voiceover uses the C3 recording of the user's own voice.
+`engine: "c3"` in its record. A C3 video is a vertical 9:16 YouTube Short just under a minute (the user's rule, 2026-10-29):
+the tools draw its stills, clips and thumbnails 9:16 by themselves, and the CapCut build puts it on a 9:16 canvas with
+word-by-word highlight captions. It has no mascot: each video draws its own one or two characters, and the voiceover
+uses the C3 recording of the user's own voice.
 
 Everything for one video is saved with `flow_production` (one record per video, in its own folder). Save each state's
 output there as you produce it: the other tools read their prompts from it, and Flow Studio (http://127.0.0.1:8787)
@@ -29,8 +31,9 @@ presses Flow Studio's buttons) and SENDS the saved prompts to Flow. So, unless t
   "All prompts are saved. Switch to a cheaper model and say 'run C3 in Flow', or press the buttons in Flow Studio.
   Come back here for any prompt that needs rewriting, and for 'C3 branding' once the voiceover is done."
 - Later visits: "rewrite C3 still N" (or sheet, clip, thumbnail) -> read the record, rewrite that prompt as engine.md
-  says with the user's note, save it, and tell them to say "redo still N" in the cheaper pass. "C3 branding" ->
-  STATE 8.
+  says with the user's note, save it, and tell them to say "redo still N" in the cheaper pass. "C3 branding" -> STATE 8. "Shorten the C3 script" (the voiceover ran over 58 s) -> cut words from the beats that
+  run longest, keep every fact and the beat count, re-save the script and the beats' `text`, and tell them to record
+  the voiceover again.
 - "Do it all in one go": also run the Flow steps of `c3-flow-run` at the end of each state (sheets after STATE 3,
   the part's stills after each STATE 5 turn, clips after the spending yes in STATE 6, voiceover and CapCut before
   STATE 7, thumbnails in STATE 7).
@@ -83,8 +86,8 @@ Save the part's SOUND line into `sound` (`chapter`, `music`, `sfx`, `ambient`). 
 
 **STATE 6 — Hero clips.** Write one clip prompt per ★ beat as engine.md says and save it as `clip_prompt`. C3 has a budget
 of 50 credits per video (the user's choice, 2026-10-29: Flow's free allowance), so the hero clips times the per-clip cap
-must stay within 50: save `settings.max_credits` = 12 (four clips at most, 48 credits) unless the user names a lower
-cap, and never star more beats than fit (2 for 6 beats, 3 for 9, 4 for 12 all fit at 12). Set `state: "clips"` and
+must stay within 50: save `settings.max_credits` = 12 unless the user names a lower cap (2 clips for 6 beats,
+3 for 9: both fit). Set `state: "clips"` and
 end with "Type 'next' for thumbnails." (the clips are made in the other pass).
 
 **STATE 7 — Thumbnails.** Write the 5 prompts as engine.md says, save them as `thumbnails` (`n` 1-5, `template` = a

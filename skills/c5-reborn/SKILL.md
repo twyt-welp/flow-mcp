@@ -1,6 +1,6 @@
 ---
 name: c5-reborn
-description: Write a C5 Reborn Apocalypse Engine video for Google Flow - topics, script, character sheets, beat map, still and clip prompts, thumbnail prompts, and afterwards the titles and description - saved for the flow tools to run. Use when the user says "new C5 video", "new reborn video", "write the C5 prompts", "run the C5 engine", "next reborn video", "rewrite still N" or "C5 branding". Sending the saved prompts to Flow, the voiceover and the CapCut edit belong to the c5-flow-run skill.
+description: Write a C5 Reborn Apocalypse Engine video for Google Flow - topics, script, character sheets, beat map, still and clip prompts, thumbnail prompts, and afterwards the titles and description - saved for the flow tools to run. Use when the user says "new C5 video", "new reborn video", "write the C5 prompts", "run the C5 engine", "next reborn video", "rewrite still N", "C5 branding" or "pick the Shorts". Sending the saved prompts to Flow, the voiceover and the CapCut edit belong to the c5-flow-run skill.
 ---
 
 # C5 Reborn Apocalypse Engine → Google Flow → CapCut
@@ -31,7 +31,7 @@ prompts to Flow. So, unless the user asks to do it all in one go:
   "All prompts are saved. Switch to a cheaper model and say 'run C5 in Flow', or press the buttons in Flow Studio.
   Come back here for any prompt that needs rewriting, and for 'C5 branding' once the voiceover is done."
 - Later visits: "rewrite still N" (or sheet, clip, thumbnail) -> read the record, rewrite that prompt as engine.md says
-  with the user's note, save it, and tell them to say "redo still N" in the cheaper pass. "C5 branding" -> STATE 8.
+  with the user's note, save it, and tell them to say "redo still N" in the cheaper pass. "C5 branding" -> STATE 8 (with the Shorts); "pick the Shorts" -> only the SHORTS part of STATE 8.
 - "Do it all in one go" or "draw as you go": ignore this section and run every state as written below.
 
 ## Opening Flow Studio
@@ -151,7 +151,20 @@ overlay text, then the closing line.
 
 **STATE 8 — Branding & export.** Unchanged, except the CHAPTERS timestamps come from the real voiceover: read
 `voice/timing.json` chapter starts through `flow_production`'s `progress.voice` (fall back to 150 words per minute only
-if there is no voiceover). Save `branding` (`titles`, `description`, `hashtags`, `next`) and `state: "done"`.
+if there is no voiceover). Save `branding` (`titles`, `description`, `hashtags`, `next`).
+
+Then, in the same turn, pick three **SHORTS** cut from the video (the user's rule, 2026-10-29: every C5 video gets its
+Shorts with the branding). Each is a run of consecutive beats that:
+- lasts 45-58 seconds of the real voiceover (add up the beats' `start`/`end` in `progress.voice.beats`; without a
+  voiceover, 150 words per minute)
+- opens on a hook beat that works with no setup (the death, the wake-up, a betrayal, a reveal, a countdown) and ends
+  on a beat that lands (a payoff, a twist, a cliffhanger line)
+- makes sense to someone who never saw the video; the three don't overlap and come from different parts of the story
+For each, output and save into `shorts`: `n` (1-3), `title` (under 60 characters, curiosity first), `from` and `to`
+(beat numbers), `hook` (the line shown at the top for its first seconds: ALL CAPS, six words at most, not a repeat of
+the first spoken words) and `hashtags` (three to five, including #shorts). Set `state: "done"`, then end with the
+engine's closing line, adding before it: "Your 3 Shorts are saved. Say 'make the Shorts' in the cheaper pass, or press
+Build Short in Flow Studio's CapCut step."
 
 **STATE 9 — Reset.** Unchanged. A new video gets a new folder; the mascot sheet carries over by itself.
 

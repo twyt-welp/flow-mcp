@@ -56,6 +56,19 @@ export const productionShape = z.object({
   sound: z.array(z.object({ chapter: z.string(), music: z.string().optional(), sfx: z.string().optional(), ambient: z.string().optional() })).optional(),
   thumbnails: z.array(z.object({ n: z.number().int().min(1).max(9), template: z.string(), prompt: z.string() })).optional(),
   overlay_text: z.array(z.string()).optional(),
+  shorts: z
+    .array(
+      z.object({
+        n: z.number().int().min(1).max(9),
+        title: z.string().describe("The Short's title, under 60 characters."),
+        from: z.number().int().min(1).describe("First beat of the Short."),
+        to: z.number().int().min(1).describe("Last beat of the Short."),
+        hook: z.string().optional().describe("Hook line shown at the top for its first seconds, ALL CAPS, a few words."),
+        hashtags: z.array(z.string()).optional(),
+      }),
+    )
+    .optional()
+    .describe("C5 only: Shorts cut from the video (STATE 8), each a run of beats of 45-58 s of voiceover."),
   branding: z
     .object({ titles: z.array(z.string()).optional(), description: z.string().optional(), hashtags: z.array(z.string()).optional(), next: z.string().optional() })
     .optional(),
@@ -151,7 +164,8 @@ export function progress(dir: string, p: Production) {
     sheets: { total: sheets.length, done: sheets.filter((s) => (s.kind === "mascot" ? mascotSheet(dir) : sheetFile(dir, s.id))).map((s) => s.id) },
     stills: { total: beats.length, missing: beats.filter((b) => !stillFile(dir, b.n)).map((b) => b.n) },
     clips: { total: heroes.length, missing: heroes.filter((b) => !clipFile(dir, b.n)).map((b) => b.n) },
-    voice: existsSync(timing) ? (JSON.parse(readFileSync(timing, "utf8")) as { total: number; file: string; voice?: string }) : null,
+    // The word times stay in the file (the captions read them there): only their count is reported, to keep this short.
+    voice: existsSync(timing) ? (({ words, ...t }) => ({ ...t, words: words?.length ?? 0 }))(JSON.parse(readFileSync(timing, "utf8")) as { total: number; file: string; voice?: string; words?: unknown[] }) : null,
     thumbnails: { total: (p.thumbnails ?? []).length, done: (p.thumbnails ?? []).filter((t) => thumbFile(dir, t.n)).map((t) => t.n) },
   };
 }

@@ -2,10 +2,10 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { join } from "node:path";
 import { joinTakes, pauses, readWav, writeWav } from "./audio.js";
 import { speakLocally } from "./assemble.js";
-import { transcribe } from "./captions.js";
+import { alignText, transcribe } from "./captions.js";
 import { speakWithElevenLabs, type SpokenWord } from "./elevenlabs.js";
 import { speakWithGemini } from "./gemini.js";
-import { openVoiceStamp, speakWithOpenVoice } from "./openvoice.js";
+import { hearWords, openVoiceStamp, speakWithOpenVoice } from "./openvoice.js";
 import { pad, type Production } from "./production.js";
 
 // About three minutes of speech per take: long enough that a whole video is four or five requests (the free AI Studio
@@ -22,6 +22,8 @@ export interface Timing {
   aligned: "voice" | "words" | "pauses" | "estimate";
   chapters: { marker: string; start: number; end: number }[];
   beats: { n: number; chapter: string; start: number; end: number }[];
+  // Every script word as written, with when it is spoken: the captions and the subtitle file are made from these.
+  words?: { w: string; start: number; end: number }[];
 }
 
 const wordsOf = (s: string) => s.split(/\s+/).filter(Boolean);
@@ -158,11 +160,13 @@ export async function recordVoiceover(
   writeWav(narration, joined);
   const total = joined.channels[0].length / joined.rate;
 
-  // Where each take's words fall: ElevenLabs reports them itself; otherwise whisper.cpp hears them when it is installed;
-  // otherwise they are read from the voice's own pauses.
+  // Where each take's words fall: ElevenLabs reports them itself; otherwise they are heard (faster-whisper from
+  // OpenVoice's Python, then whisper.cpp) and lined up with the script's words; otherwise read from the voice's own
+  // pauses. Every script word gets a start and an end: the beats are cut on them and the captions are drawn from them.
   onStep("timing every beat against the voice");
   let aligned: Timing["aligned"] = "voice";
   const at: ((wordIndex: number) => number)[] = [];
+  const spokenWords: NonNullable<Timing["words"]> = [];
   let offset = 0;
   for (const [i, file] of files.entries()) {
     const take = readWav(file);
@@ -171,26 +175,43 @@ export async function recordVoiceover(
     const n = words.length;
     const base = offset;
     const said = join(out, `take-${pad(i + 1)}.words.json`);
+    const heardFile = join(out, `take-${pad(i + 1)}.heard.json`);
     const exact: SpokenWord[] = existsSync(said) ? JSON.parse(readFileSync(said, "utf8")) : [];
-    let heard: { start: number; end: number }[] = [];
-    if (exact.length !== n) {
-      try {
-        heard = (await transcribe(file, "en")).words;
-      } catch {
-        heard = [];
+    let times: { start: number; end: number }[] = [];
+    if (exact.length === n) times = exact;
+    else {
+      // What was heard is kept beside the take, keyed by the take's stamp, so a rebuild doesn't listen again.
+      const stamp = readFileSync(join(out, `take-${pad(i + 1)}.txt`), "utf8");
+      let heard: { text: string; start: number; end: number }[] = [];
+      const kept = existsSync(heardFile) ? (JSON.parse(readFileSync(heardFile, "utf8")) as { stamp: string; words: typeof heard }) : undefined;
+      if (kept?.stamp === stamp) heard = kept.words;
+      else {
+        onStep(`listening to take ${i + 1} for word times`);
+        heard = (await hearWords(file)) ?? [];
+        if (!heard.length) {
+          try {
+            heard = (await transcribe(file, "en")).words;
+          } catch {
+            heard = [];
+          }
+        }
+        if (heard.length) writeFileSync(heardFile, JSON.stringify({ stamp, words: heard }));
+      }
+      if (heard.length > n / 2) {
+        if (aligned === "voice") aligned = "words";
+        times = alignText(heard, parts[i].text, "en");
       }
     }
-    if (exact.length === n) {
-      // The voice's own word times: a boundary falls in the gap between the last word said and the next.
-      at.push((k) => (k <= 0 ? base : k >= n ? base + exact[n - 1].end : base + (exact[k - 1].end + exact[k].start) / 2));
-    } else if (heard.length > n / 2) {
-      if (aligned === "voice") aligned = "words";
-      at.push((k) => (k <= 0 ? base : base + heard[Math.min(heard.length - 1, Math.max(0, Math.round((k * heard.length) / n) - 1))].end));
+    if (times.length === n) {
+      // A boundary falls in the gap between the last word said and the next.
+      at.push((k) => (k <= 0 ? base : k >= n ? base + times[n - 1].end : base + (times[k - 1].end + times[k].start) / 2));
     } else {
       const time = fromPauses(file, words);
       at.push((k) => base + time(k));
+      times = words.map((_, k) => ({ start: time(k), end: Math.max(time(k) + 0.05, time(k + 1) - 0.05) }));
       aligned = "pauses";
     }
+    words.forEach((w, k) => spokenWords.push({ w, start: round(base + times[k].start), end: round(base + times[k].end) }));
     offset += len + (i < files.length - 1 ? GAP_S : 0);
   }
 
@@ -216,8 +237,9 @@ export async function recordVoiceover(
       beats.push({ n: b.n, chapter: ch.marker, start: round(start), end: round(Math.max(end, start + 0.5)) });
     }
   }
-  const timing: Timing = { file: narration, voice: o.voice, engine: o.engine, total: round(total), aligned, chapters: chapterTimes, beats };
+  const timing: Timing = { file: narration, voice: o.voice, engine: o.engine, total: round(total), aligned, chapters: chapterTimes, beats, words: spokenWords };
   writeFileSync(join(out, "timing.json"), JSON.stringify(timing, null, 2));
+  writeFileSync(join(out, "subtitles.srt"), toSrt(spokenWords));
   return timing;
 }
 
@@ -241,3 +263,35 @@ function locate(parts: Take[], marker: string) {
 }
 
 const round = (s: number) => Math.round(s * 1000) / 1000;
+
+// The voiceover as a subtitle file for YouTube's CC button: lines of up to about 42 letters, broken after a sentence or
+// a comma where one is near, each shown until the next begins.
+export function toSrt(words: NonNullable<Timing["words"]>): string {
+  const lines: (typeof words)[] = [];
+  let cur: typeof words = [];
+  for (const w of words) {
+    const len = cur.map((x) => x.w).join(" ").length;
+    if (cur.length && (len + 1 + w.w.length > 42 || w.start - cur.at(-1)!.end > 0.8)) {
+      lines.push(cur);
+      cur = [];
+    }
+    cur.push(w);
+    if (/[.!?]["')\]]*$/.test(w.w) || (/[,;:]$/.test(w.w) && len > 24)) {
+      lines.push(cur);
+      cur = [];
+    }
+  }
+  if (cur.length) lines.push(cur);
+  const stamp = (t: number) => {
+    const ms = Math.max(0, Math.round(t * 1000));
+    const p = (v: number, n = 2) => String(v).padStart(n, "0");
+    return `${p(Math.floor(ms / 3_600_000))}:${p(Math.floor(ms / 60_000) % 60)}:${p(Math.floor(ms / 1000) % 60)},${p(ms % 1000, 3)}`;
+  };
+  return lines
+    .map((l, i) => {
+      const next = lines[i + 1]?.[0].start;
+      const end = next !== undefined ? Math.min(l.at(-1)!.end + 0.4, next) : l.at(-1)!.end + 0.4;
+      return `${i + 1}\n${stamp(l[0].start)} --> ${stamp(end)}\n${l.map((x) => x.w).join(" ")}\n`;
+    })
+    .join("\n");
+}

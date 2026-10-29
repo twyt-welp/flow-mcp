@@ -1,6 +1,6 @@
 ---
 name: c5-flow-run
-description: Send a C5 video's saved prompts to Google Flow and finish it - character sheets, stills, paid hero clips under a credit cap, the voiceover (the user's own cloned voice, or ElevenLabs), the CapCut timeline written into the project files, and thumbnails. Built for a cheaper model; it never writes prompts. Use when the user says "run C5 in Flow", "send my prompts to Flow", "draw the stills", "make the clips", "redo still N", "record the voiceover", "open Flow Studio", or asks to edit, sync or build a CapCut project ("edit my CapCut project - [project name]", "build the timeline by writing the project files").
+description: Send a C5 video's saved prompts to Google Flow and finish it - character sheets, stills, paid hero clips under a credit cap, the voiceover (the user's own cloned voice, or ElevenLabs), the CapCut timeline written into the project files, and thumbnails. Built for a cheaper model; it never writes prompts. Use when the user says "run C5 in Flow", "send my prompts to Flow", "draw the stills", "make the clips", "redo still N", "record the voiceover", "open Flow Studio", "make the Shorts", or asks to edit, sync or build a CapCut project ("edit my CapCut project - [project name]", "build the timeline by writing the project files").
 ---
 
 # C5 in Flow: send the saved prompts
@@ -50,9 +50,18 @@ Each queues jobs: `flow_wait` until they finish (it answers within a minute; cal
    `flow_capcut_build`. Never use computer use and never open CapCut. Report what was placed, any `sfx_skipped` cues and
    warnings in a few lines, then "Open CapCut, check the edit and export it." `flow_capcut_restore` brings the old
    timeline back if asked.
+   The long-form edit has no captions on the picture (the user's choice): tell them to upload `voice/subtitles.srt`
+   (written by the voiceover step) in YouTube Studio, Subtitles, when they publish.
 6. **Thumbnails (free).** `flow_c5_thumbnails` with `video`. Show the paths and the saved `overlay_text`.
+7. **Shorts (free, after the branding).** When the video's record has `shorts` (the writing pass picks them with the
+   branding) and the user says "make the Shorts" (or "make Short N"): CapCut must be closed (`flow_capcut_projects`),
+   then `flow_capcut_short` with `video` and `short` for each one. Each becomes its own vertical CapCut project,
+   "<main project> Short N", copied from the main edit, with highlight captions and its hook line. Report per Short:
+   the project name, runtime, any warnings, its title and hashtags, then "Open CapCut, check each Short and export it
+   at 1080x1920." If CapCut doesn't list a new project, ask the user to make an empty project with that name, close
+   CapCut, and run it again with `project` set to it.
 
-Then: "Done in Flow. Switch back to the stronger model and say 'C5 branding' for the titles and description."
+Then: "Done in Flow. Switch back to the stronger model and say 'C5 branding' for the titles, description and Shorts."
 
 ## Rules
 

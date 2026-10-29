@@ -530,8 +530,11 @@ h1 span{margin-left:-.25em}
           <label class="f">Ambience <span id="cc_avOut">25%</span></label><input type="range" id="cc_av" min="0" max="100" value="25">
           <label class="check"><input type="checkbox" id="cc_titles" checked>Day markers on screen at each chapter</label>
           <label class="check"><input type="checkbox" id="cc_ledger" checked>Ledger numbers and countdowns from the edit notes</label>
+          <label class="f">Captions</label>
+          <select id="cc_captions"><option value="">Automatic: highlight for C3, none for C5 (subtitle file for YouTube)</option><option value="highlight">Highlight: 2-3 big words, the spoken one lit up</option><option value="line">One plain line at the bottom</option><option value="off">None</option></select>
           <div class="rowbtns"><button class="btn" id="cc_go">Build timeline</button><button class="btn ghost small" id="cc_undo">Undo last build</button></div>
           <div id="cc_out" style="margin-top:14px"></div>
+          <div id="cc_shorts" style="margin-top:14px"></div>
         </div>
       </section>
 
@@ -1809,6 +1812,20 @@ async function ccLoad() {
   const made = lib ? `Claude's library: ${lib.music} music moods, ${lib.sfx} sound effects and ${lib.ambience} ambience beds, made in code and free.` : "";
   $("#cc_audioInfo").textContent = (AUDIO.audio_dir ? `Yours: ${AUDIO.music} music, ${AUDIO.sfx} sound effects, ${AUDIO.ambience} ambience files (used first when they fit). ` : "") + made;
   for (const [id, key] of [["cc_mv", "mv"], ["cc_sv", "sv"], ["cc_av", "av"]]) { $("#" + id).value = S.c5[key]; $(`#${id}Out`).textContent = `${S.c5[key]}%`; }
+  // The Shorts the writing pass picked with the branding (C5), each built as its own vertical CapCut project.
+  const shorts = P().shorts ?? [];
+  $("#cc_shorts").innerHTML = shorts.length ? `<label class="f">Shorts</label>` + shorts.map((x) => `<div class="vrow" style="margin-top:6px"><span style="flex:1">${x.n}. ${esc(x.title)} <span class="empty">beats ${x.from}-${x.to}</span></span><button type="button" class="btn small" data-short="${x.n}">Build Short ${x.n}</button></div>`).join("") + `<div id="cc_shortOut" style="margin-top:8px"></div>` : "";
+  for (const b of document.querySelectorAll("#cc_shorts [data-short]")) b.onclick = async () => {
+    if (!guard()) return;
+    const n = +b.dataset.short;
+    b.disabled = true; b.textContent = "Building…";
+    try {
+      const r = await api("capcut_short", { video: vid(), short: n, music_volume: S.c5.mv / 100, sfx_volume: S.c5.sv / 100, ambience_volume: S.c5.av / 100 });
+      $("#cc_shortOut").innerHTML = `<div class="report"><div><b>Short ${n} built</b> in "${esc(r.project)}"${r.project_created ? " (new project)" : ""}: ${r.runtime}, ${r.stills} stills, ${r.clips} clips, ${r.captions} captions.</div>${r.warnings.map((w) => `<div class="warn">${esc(w)}</div>`).join("")}</div>`;
+      ccLoad();
+    } catch (err) { $("#cc_shortOut").innerHTML = `<p class="err" style="color:var(--bad)">${esc(err.message)}</p>`; }
+    b.disabled = false; b.textContent = `Build Short ${n}`;
+  };
 }
 for (const [id, key] of [["cc_mv", "mv"], ["cc_sv", "sv"], ["cc_av", "av"]]) $("#" + id).addEventListener("input", (e) => { S.c5[key] = +e.target.value; $(`#${id}Out`).textContent = `${e.target.value}%`; save(); });
 $("#cc_reload").onclick = ccLoad;
@@ -1819,9 +1836,9 @@ $("#cc_go").onclick = async () => {
   if (!confirm(`Build the timeline into "${project}"?\n\nIts current timeline is backed up first and then replaced. CapCut must be closed.`)) return;
   const b = $("#cc_go"); b.disabled = true; b.textContent = "Building…";
   try {
-    const r = await api("capcut_build", { video: vid(), project, music_volume: S.c5.mv / 100, sfx_volume: S.c5.sv / 100, ambience_volume: S.c5.av / 100, titles: $("#cc_titles").checked, ledger: $("#cc_ledger").checked });
+    const r = await api("capcut_build", { video: vid(), project, music_volume: S.c5.mv / 100, sfx_volume: S.c5.sv / 100, ambience_volume: S.c5.av / 100, titles: $("#cc_titles").checked, ledger: $("#cc_ledger").checked, ...($("#cc_captions").value ? { captions: $("#cc_captions").value } : {}) });
     $("#cc_out").innerHTML = `<div class="report"><div><b>Built.</b> ${r.runtime} of picture against ${r.narration} of voice. Backup: <code>${esc(r.backup)}</code></div>
-      <div>${r.stills} stills, ${r.clips} hero clips${r.held_stills ? ` (${r.held_stills} opening on their still first)` : ""}, ${r.titles} day markers, ${r.ledger} ledger overlays, ${r.sfx_placed} sound effects.</div>
+      <div>${r.stills} stills, ${r.clips} hero clips${r.held_stills ? ` (${r.held_stills} opening on their still first)` : ""}, ${r.titles} day markers, ${r.ledger} ledger overlays, ${r.sfx_placed} sound effects${r.captions ? `, ${r.captions} captions` : ""}.</div>
       ${r.music.length ? `<div>Music: ${r.music.map(esc).join(", ")}</div>` : ""}${r.ambience.length ? `<div>Ambience: ${r.ambience.map(esc).join(", ")}</div>` : ""}
       ${r.missing_stills.length ? `<div class="warn">No still yet for beat(s) ${r.missing_stills.join(", ")}: the beat before is held instead.</div>` : ""}
       ${r.sfx_skipped.length ? `<div class="warn">No matching sound file for: ${r.sfx_skipped.map(esc).join("; ")}</div>` : ""}${r.warnings.map((w) => `<div class="warn">${esc(w)}</div>`).join("")}

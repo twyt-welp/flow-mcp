@@ -15,6 +15,10 @@ export function sheetPath(root: string, dir: string, s: Pick<Sheet, "id" | "kind
   return s.kind === "mascot" ? mascotSheet(dir) : sheetFile(dir, s.id);
 }
 
+// C3 videos are vertical Shorts (2026-10-29): stills, clips and thumbnails are drawn 9:16. Sheets stay 16:9 (their
+// rows of turnaround views need the width).
+const frame = (p: Production) => (engineOf(p) === "c3" ? ("9:16" as const) : ("16:9" as const));
+
 // The mascot rides along with every still and thumbnail even when this video's record lists no mascot sheet: the
 // channel's own sheet is the reference, and the writing pass no longer re-declares it.
 // C3 videos have no mascot: each one draws its own one or two characters.
@@ -77,7 +81,7 @@ export function planStills(root: string, dir: string, p: Production, only: numbe
     return beats.map((b) => ({
       prompt: b.still_prompt!,
       type: "image" as const,
-      aspect_ratio: "16:9" as const,
+      aspect_ratio: frame(p),
       max_credits: 0,
       reference_images: refsFor(b, sheets.map((x) => x.s))
         .map((s) => sheets.find((x) => x.s.id === s.id)!.file!)
@@ -96,7 +100,7 @@ export function planStills(root: string, dir: string, p: Production, only: numbe
     return {
       prompt: `Agent batch: ${list.length} stills for ${ch}`,
       type: "image" as const,
-      aspect_ratio: "16:9" as const,
+      aspect_ratio: frame(p),
       max_credits: 0,
       agent_scenes: list.map((b) => b.still_prompt!),
       agent_numbers: list.map((b) => b.n),
@@ -137,7 +141,7 @@ export function planClips(dir: string, p: Production, only: number[] | undefined
       prompt: b.clip_prompt,
       type: "video",
       model: o.model,
-      aspect_ratio: "16:9",
+      aspect_ratio: frame(p),
       duration: o.model.startsWith("Omni") ? o.duration : undefined,
       resolution: o.model.startsWith("Omni") ? o.resolution : undefined,
       max_credits: o.max_credits,
@@ -161,7 +165,7 @@ export function planThumbnails(root: string, dir: string, p: Production, only: n
     if (redo) setAside(thumbFile(dir, t.n));
     const text = t.prompt.toUpperCase();
     const refs = sheets.filter(({ s }) => s.kind === "mascot" || (s.handle && text.includes(s.handle.toUpperCase())) || (s.kind === "base" && /BASE/.test(text)) || (s.kind === "threat" && text.includes("THREAT LOCK")));
-    jobs.push({ prompt: t.prompt, type: "image", aspect_ratio: "16:9", max_credits: 0, reference_images: refs.map((x) => x.file!).slice(0, 3), output_dir: out, file_stem: `thumb-${t.n}` });
+    jobs.push({ prompt: t.prompt, type: "image", aspect_ratio: frame(p), max_credits: 0, reference_images: refs.map((x) => x.file!).slice(0, 3), output_dir: out, file_stem: `thumb-${t.n}` });
   }
   return jobs;
 }

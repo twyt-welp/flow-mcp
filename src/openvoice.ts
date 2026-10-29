@@ -84,3 +84,26 @@ export async function speakWithOpenVoice(text: string, target: string, profile?:
     rmSync(dir, { recursive: true, force: true });
   }
 }
+
+// When each word of a take is said, heard by faster-whisper (which OpenVoice installs) from the same Python. Used to
+// time the beats and the captions for any voice that doesn't report its own word times. Undefined when OpenVoice
+// isn't set up here, or hearing fails: the caller falls back to the voice's pauses.
+export async function hearWords(file: string): Promise<{ text: string; start: number; end: number }[] | undefined> {
+  const { python } = setup();
+  if (!existsSync(python)) return undefined;
+  const dir = mkdtempSync(join(tmpdir(), "flow-words-"));
+  try {
+    const out = join(dir, "words.json");
+    await run(python, [join(CODE_ROOT, "scripts", "words.py"), "--wav", file, "--out", out], {
+      timeout: 10 * 60_000,
+      maxBuffer: 32 * 1024 * 1024,
+      windowsHide: true,
+      env: { ...process.env, PYTHONIOENCODING: "utf-8" },
+    });
+    return JSON.parse(readFileSync(out, "utf8"));
+  } catch {
+    return undefined;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}

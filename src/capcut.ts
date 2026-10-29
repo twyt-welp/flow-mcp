@@ -188,6 +188,34 @@ export interface BuildOptions {
   ambience_volume: number;
   titles: boolean;
   ledger: boolean;
+  // Captions drawn as CapCut text: "highlight" (2-3 big words, the spoken one lit up: C3 and Shorts), "line" (one
+  // plain line at the bottom), "off" (long-form C5: only the subtitle file for YouTube).
+  captions?: "highlight" | "line" | "off";
+  // A Short: only beats from..to of the video, its own stretch of the same voiceover, on a 9:16 canvas, with its hook
+  // line at the top for the first seconds.
+  window?: { from: number; to: number; hook?: string };
+  vertical?: boolean;
+}
+
+// Cuts the video's timing down to a run of beats, every time measured from the first of them.
+function windowed(t: Timing, from: number, to: number): { timing: Timing; offset: number } {
+  const k0 = t.beats.findIndex((b) => b.n >= from);
+  let k1 = t.beats.length - 1;
+  while (k1 >= 0 && t.beats[k1].n > to) k1--;
+  if (k0 < 0 || k1 < k0) throw new Error(`Beats ${from}-${to} aren't in this video's voiceover.`);
+  const offset = t.beats[k0].start;
+  const end = k1 + 1 < t.beats.length ? t.beats[k1 + 1].start : t.total;
+  const shift = <X extends { start: number; end: number }>(x: X): X => ({ ...x, start: Math.max(0, x.start - offset), end: Math.min(end, x.end) - offset });
+  return {
+    offset,
+    timing: {
+      ...t,
+      total: end - offset,
+      beats: t.beats.slice(k0, k1 + 1).map(shift),
+      chapters: t.chapters.filter((c) => c.end > offset && c.start < end).map(shift),
+      words: (t.words ?? []).filter((w) => w.start >= offset - 0.05 && w.start < end).map(shift),
+    },
+  };
 }
 
 export async function buildCapcut(o: BuildOptions) {
@@ -198,8 +226,12 @@ export async function buildCapcut(o: BuildOptions) {
 
   const timingFile = join(o.dir, "voice", "timing.json");
   if (!existsSync(timingFile)) throw new Error("There's no timed voiceover for this video yet. Record the voiceover first: the timeline is built from it.");
-  const timing = JSON.parse(readFileSync(timingFile, "utf8")) as Timing;
-  if (!existsSync(timing.file)) throw new Error(`The voiceover file is missing: ${timing.file}. Record the voiceover again.`);
+  const whole = JSON.parse(readFileSync(timingFile, "utf8")) as Timing;
+  if (!existsSync(whole.file)) throw new Error(`The voiceover file is missing: ${whole.file}. Record the voiceover again.`);
+  const { timing, offset } = o.window ? windowed(whole, o.window.from, o.window.to) : { timing: whole, offset: 0 };
+  // C3 videos are drawn 9:16 and a Short is built 9:16; everything is placed on that canvas.
+  const vertical = o.vertical ?? Boolean(o.window);
+  const [W, H] = vertical ? [1080, 1920] : [1920, 1080];
 
   const raw = readFileSync(contentFile, "utf8");
   let draft: Json;
@@ -293,6 +325,7 @@ export async function buildCapcut(o: BuildOptions) {
     { name: "SFX 4", type: "audio", flag: 0, segments: [] },
     { name: "Titles", type: "text", flag: 0, segments: [] },
     { name: "Ledger", type: "text", flag: 0, segments: [] },
+    { name: "Captions", type: "text", flag: 0, segments: [] },
   ];
   const track = (name: string) => tracks.find((t) => t.name === name)!;
   const indexOf = (t: Track) => tracks.indexOf(t);
@@ -303,6 +336,10 @@ export async function buildCapcut(o: BuildOptions) {
     property_type,
     keyframe_list: points.map(([t, v]) => ({ id: hex(), curveType: "Line", time_offset: Math.round(t), left_control: { x: 0, y: 0 }, right_control: { x: 0, y: 0 }, values: [v], string_value: "", graphID: "" })),
   });
+
+  // CapCut fits a picture inside the canvas at scale 1; this is the scale that fills it instead (1 when the shapes match,
+  // about 3.2 for a 16:9 still on a 9:16 Short).
+  const fill = (m: Json) => (m.width && m.height ? Math.max(W / m.width, H / m.height) / Math.min(W / m.width, H / m.height) : 1);
 
   function videoSeg(t: Track, m: Json, start: number, dur: number, keyframes: Json[] = [], scale = 1, x = 0, y = 0, sourceStart = 0) {
     const s = clone(T.VIDEO_SEG);
@@ -373,9 +410,37 @@ export async function buildCapcut(o: BuildOptions) {
     t.segments.push(s);
   }
 
+  // A caption: bold white with a dark outline, no fade (captions follow each other edge to edge), and optionally one
+  // stretch of it lit up yellow, the word being spoken.
+  function captionSeg(t: Track, text: string, start: number, dur: number, size: number, y: number, lit?: [number, number]) {
+    const look = (range: [number, number], color: number[]) => ({
+      fill: { alpha: 1.0, content: { render_type: "solid", solid: { alpha: 1.0, color } } },
+      range,
+      size,
+      bold: true,
+      italic: false,
+      underline: false,
+      strokes: [{ content: { solid: { alpha: 1.0, color: [0.0, 0.0, 0.0] } }, width: 0.14 }],
+    });
+    const white = [1, 1, 1];
+    const styles = lit
+      ? ([[0, lit[0]], lit, [lit[1], text.length]] as [number, number][]).filter(([a, b]) => b > a).map((r) => look(r, r === lit ? [1, 0.84, 0.18] : white))
+      : [look([0, text.length], white)];
+    const m = clone(T.TEXT);
+    m.id = hex();
+    m.font_path = fontPath;
+    m.font_size = size;
+    m.content = JSON.stringify({ styles, text });
+    materials.texts.push(m);
+    const s = clone(T.TEXT_SEG);
+    Object.assign(s, { id: hex(), material_id: m.id, target_timerange: { start, duration: dur }, render_index: 15000 + textCount++, track_render_index: indexOf(t), common_keyframes: [] });
+    s.clip.transform = { x: 0, y };
+    t.segments.push(s);
+  }
+
   /* ---- 1. picture: one still (or hero clip) per beat, cut to the voice ---- */
   const beats = new Map((o.production.beats ?? []).map((b) => [b.n, b]));
-  const report = { stills: 0, clips: 0, held_stills: 0, missing_stills: [] as number[], music: [] as string[], ambience: [] as string[], sfx_placed: 0, sfx_skipped: [] as string[], titles: 0, ledger: 0, warnings: [] as string[] };
+  const report = { stills: 0, clips: 0, held_stills: 0, missing_stills: [] as number[], music: [] as string[], ambience: [] as string[], sfx_placed: 0, sfx_skipped: [] as string[], titles: 0, ledger: 0, captions: 0, warnings: [] as string[] };
   const main = track("Main");
   const order: Beat["move"][] = ["push_in", "pan_left", "pull_out", "pan_right"];
   let lastMove: Beat["move"] | undefined;
@@ -397,11 +462,13 @@ export async function buildCapcut(o: BuildOptions) {
         // The beat outlasts its clip: its own still comes first, easing out to full frame, and the clip (whose first
         // frame IS that still) takes over at the end of the beat, so the hand-over can't be seen.
         const hold = dur - len;
-        videoSeg(main, await visual(still, "photo"), at, hold, [kf("KFTypeScaleX", [[0, 1.08], [hold, 1.0]])], 1.08);
+        const sm = await visual(still, "photo");
+        const f = fill(sm);
+        videoSeg(main, sm, at, hold, [kf("KFTypeScaleX", [[0, 1.08 * f], [hold, 1.0 * f]])], 1.08 * f);
         report.held_stills++;
         at += hold;
       } else if (len < dur) report.warnings.push(`Beat ${bt.n}: its clip is shorter than the beat and its still is missing, so the picture goes black for ${((dur - len) / 1e6).toFixed(1)} s.`);
-      videoSeg(main, m, at, len);
+      videoSeg(main, m, at, len, [], fill(m));
       report.clips++;
       prevStill = still ?? prevStill;
       continue;
@@ -417,14 +484,15 @@ export async function buildCapcut(o: BuildOptions) {
     if (!move) move = order[(order.indexOf(lastMove) + 1) % order.length];
     lastMove = move;
     const m = await visual(still, "photo");
-    const [frames, scale, x, y] = motion(move, dur, kf);
+    const [frames, scale, x, y] = motion(move, dur, kf, fill(m));
     videoSeg(main, m, at, dur, frames, scale, x, y);
     report.stills++;
   }
 
   /* ---- 2. the voice ---- */
   const vo = await sound(timing.file);
-  audioSeg(track("Voiceover"), vo.m, 0, us(vo.seconds), 1.0);
+  if (o.window) audioSeg(track("Voiceover"), vo.m, 0, Math.min(us(timing.total), us(vo.seconds) - us(offset)), 1.0, us(offset));
+  else audioSeg(track("Voiceover"), vo.m, 0, us(vo.seconds), 1.0);
 
   /* ---- 3. cut to white at the end of the cold open ---- */
   if (timing.chapters.length > 1 && /cold/i.test(timing.chapters[0].marker)) {
@@ -524,7 +592,8 @@ export async function buildCapcut(o: BuildOptions) {
     for (const ch of timing.chapters) {
       const label = ch.marker.replace(/\(.*?\)/g, "").trim();
       if (!/\b(day|week|month|hour|year)s?\b/i.test(label)) continue;
-      textSeg(track("Titles"), label.toUpperCase(), us(ch.start + 0.27), Math.min(us(3.5), us(ch.end - ch.start)), { size: 15, color: [1, 1, 1], x: -0.05, y: 0.72 });
+      if (o.window?.hook && ch.start < 3.5) continue;
+      textSeg(track("Titles"), label.toUpperCase(), us(ch.start + 0.27), Math.min(us(3.5), us(ch.end - ch.start)), { size: 15, color: [1, 1, 1], x: vertical ? 0 : -0.05, y: vertical ? 0.62 : 0.72 });
       report.titles++;
     }
   }
@@ -535,15 +604,67 @@ export async function buildCapcut(o: BuildOptions) {
       const text = beats.get(bt.n)?.overlay?.trim();
       if (!text || /^(none|-|n\/a)$/i.test(text)) continue;
       if (c3) {
-        textSeg(track("Titles"), text.toUpperCase(), us(bt.start + 0.2), Math.min(us(2.5), us(bt.end - bt.start)), { size: 15, color: [1, 1, 1], x: 0, y: -0.62 });
+        textSeg(track("Titles"), text.toUpperCase(), us(bt.start + 0.2), Math.min(us(2.5), us(bt.end - bt.start)), { size: 15, color: [1, 1, 1], x: 0, y: vertical ? 0.58 : -0.62 });
         report.titles++;
         continue;
       }
       if (/^day\s*[-+]?\d+$/i.test(text) && timing.chapters.some((c) => c.start === bt.start)) continue;
       const dur = Math.min(us(5), us(bt.end - bt.start) - us(0.4));
       if (dur < us(1)) continue;
-      textSeg(track("Ledger"), text.toUpperCase(), us(bt.start + 0.3), dur, { size: 12, color: [1, 0.77, 0.24], x: -0.6, y: -0.74 });
+      textSeg(track("Ledger"), text.toUpperCase(), us(bt.start + 0.3), dur, { size: 12, color: [1, 0.77, 0.24], x: vertical ? 0 : -0.6, y: vertical ? 0.42 : -0.74 });
       report.ledger++;
+    }
+  }
+
+  /* ---- 6. a Short's hook line, at the top for its first seconds ---- */
+  if (o.window?.hook) {
+    textSeg(track("Titles"), o.window.hook.toUpperCase(), 0, Math.min(us(3.5), us(timing.total)), { size: 14, color: [1, 1, 1], x: 0, y: 0.62 });
+    report.titles++;
+  }
+
+  /* ---- 7. captions from the voiceover's word times, spelled as the script has them ---- */
+  const style = o.captions ?? "off";
+  const words = timing.words ?? [];
+  if (style !== "off" && !words.length) report.warnings.push("This voiceover has no word times yet, so no captions were added. Record the voiceover again to get them.");
+  if (style !== "off" && words.length) {
+    const show = (w: string) => w.replace(/^["'(\[]+|[.,;:"')\]]+$/g, "");
+    const groups: (typeof words)[] = [];
+    let cur: typeof words = [];
+    const most = style === "highlight" ? 3 : 7;
+    for (const w of words) {
+      if (cur.length && (cur.length >= most || w.start - cur.at(-1)!.end > 0.6)) {
+        groups.push(cur);
+        cur = [];
+      }
+      cur.push(w);
+      if (/[.!?,;:]["')\]]*$/.test(w.w) && (style === "highlight" || cur.length >= 4)) {
+        groups.push(cur);
+        cur = [];
+      }
+    }
+    if (cur.length) groups.push(cur);
+    const lane = track("Captions");
+    const [size, y] = style === "highlight" ? [vertical ? 13 : 12, vertical ? -0.3 : -0.55] : [vertical ? 9 : 8, vertical ? -0.3 : -0.82];
+    for (const [g, list] of groups.entries()) {
+      const text = list.map((w) => (style === "highlight" ? show(w.w).toUpperCase() : show(w.w))).join(" ");
+      const groupEnd = Math.min(list.at(-1)!.end + 0.3, groups[g + 1]?.[0].start ?? timing.total, timing.total);
+      if (style === "line") {
+        captionSeg(lane, text, us(list[0].start), us(groupEnd) - us(list[0].start), size, y);
+        report.captions++;
+        continue;
+      }
+      // One piece per word: the whole group stays up and the spoken word is lit, so it reads like a karaoke line.
+      let from = 0;
+      for (const [k, w] of list.entries()) {
+        const piece = show(w.w).toUpperCase();
+        const at = text.indexOf(piece, from);
+        if (at >= 0) from = at + piece.length;
+        const start = us(w.start);
+        const end = us(k + 1 < list.length ? list[k + 1].start : groupEnd);
+        if (end - start < FRAME) continue;
+        captionSeg(lane, text, start, end - start, size, y, at >= 0 ? [at, at + piece.length] : undefined);
+      }
+      report.captions++;
     }
   }
 
@@ -567,7 +688,7 @@ export async function buildCapcut(o: BuildOptions) {
     return { id: hex(), type: t.type, flag: t.flag, attribute: 0, name: t.name, is_default_name: false, segments: t.segments.sort((a, b) => a.target_timerange.start - b.target_timerange.start) };
   });
   draft.duration = duration;
-  draft.canvas_config = { ...(draft.canvas_config ?? {}), ratio: "original", width: 1920, height: 1080 };
+  draft.canvas_config = { ...(draft.canvas_config ?? {}), ratio: "original", width: W, height: H };
   const text = JSON.stringify(draft);
 
   // CapCut 9.6 keeps the same timeline in several files (the main one, a copy under Timelines/<id>/, and template-2.tmp
@@ -596,7 +717,17 @@ export async function buildCapcut(o: BuildOptions) {
   return summary;
 }
 
-function motion(move: Beat["move"], dur: number, kf: (p: string, pts: [number, number][]) => Json): [Json[], number, number, number] {
+// f is the scale that fills the canvas (see fill). On a Short a widescreen still is far wider than the frame, so a pan
+// travels further across it, keeping the middle of the picture, where the subject usually is, in view.
+function motion(move: Beat["move"], dur: number, kf: (p: string, pts: [number, number][]) => Json, f = 1): [Json[], number, number, number] {
+  const [frames, scale, x, y] = baseMotion(move, dur, kf);
+  if (f === 1) return [frames, scale, x, y];
+  const pan = f > 1.5 ? 4 : 1;
+  for (const k of frames) for (const p of k.keyframe_list) p.values = p.values.map((v: number) => (k.property_type === "KFTypeScaleX" ? v * f : k.property_type === "KFTypePositionX" ? v * pan : v));
+  return [frames, scale * f, x * pan, y];
+}
+
+function baseMotion(move: Beat["move"], dur: number, kf: (p: string, pts: [number, number][]) => Json): [Json[], number, number, number] {
   switch (move) {
     case "pull_out":
       return [[kf("KFTypeScaleX", [[0, 1.13], [dur, 1.03]])], 1.13, 0, 0];
@@ -700,3 +831,59 @@ const fmt = (u: number) => {
   const s = Math.round(u / 1e6);
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 };
+
+// A Short gets its own CapCut project, made the way CapCut's own Duplicate does it: the main project's folder copied
+// under the new name (without flow-mcp's backups), with a new draft id and its name and folder written into its
+// draft_meta_info.json and into the drafts list CapCut keeps in root_meta_info.json (backed up first). The build then
+// replaces the copied timeline with the Short's own. Nothing is done if the project already exists.
+export async function duplicateCapcut(from: string, name: string): Promise<{ created: boolean; project: string }> {
+  const src = join(DRAFTS_ROOT, from);
+  const dst = join(DRAFTS_ROOT, name);
+  if (existsSync(join(dst, "draft_content.json"))) return { created: false, project: name };
+  if (!existsSync(join(src, "draft_content.json"))) throw new Error(`No CapCut project called "${from}" to copy the Short from.`);
+  if (/[<>:"/\\|?*]/.test(name)) throw new Error(`"${name}" can't be a folder name.`);
+  if (await capcutRunning()) throw new Error("CapCut is open. Close CapCut completely first, then make the Short.");
+  const skip = /^(draft_content|draft_meta_info|template-2)\.(flow-mcp-|backup|before|capcut-saved|tanya).*|\.bak$/i;
+  const copy = (a: string, b: string) => {
+    mkdirSync(b, { recursive: true });
+    for (const e of readdirSync(a, { withFileTypes: true })) {
+      if (e.isDirectory()) copy(join(a, e.name), join(b, e.name));
+      else if (!skip.test(e.name)) copyFileSync(join(a, e.name), join(b, e.name));
+    }
+  };
+  copy(src, dst);
+  const id = randomUUID().toUpperCase();
+  const now = Date.now() * 1000;
+  const metaFile = join(dst, "draft_meta_info.json");
+  if (existsSync(metaFile)) {
+    const meta = JSON.parse(readFileSync(metaFile, "utf8")) as Json;
+    Object.assign(meta, { draft_id: id, draft_name: name, draft_fold_path: fwd(dst), tm_draft_create: now, tm_draft_modified: now });
+    writeFileSync(metaFile, JSON.stringify(meta));
+  }
+  const rootFile = join(DRAFTS_ROOT, "root_meta_info.json");
+  if (existsSync(rootFile)) {
+    const stamp = new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
+    copyFileSync(rootFile, join(DRAFTS_ROOT, `root_meta_info.flow-mcp-${stamp}.json`));
+    const root = JSON.parse(readFileSync(rootFile, "utf8")) as Json;
+    const list: Json[] = root.all_draft_store ?? [];
+    const base = list.find((d) => d.draft_name === from) ?? list[0];
+    if (base) {
+      const folder = fwd(dst);
+      list.unshift({
+        ...clone(base),
+        draft_id: id,
+        draft_name: name,
+        draft_fold_path: folder,
+        draft_json_file: `${folder}\\draft_content.json`,
+        draft_cover: `${folder}\\draft_cover.jpg`,
+        tm_draft_create: now,
+        tm_draft_modified: now,
+      });
+      root.all_draft_store = list;
+      if (Array.isArray(root.draft_ids)) root.draft_ids.unshift(id);
+      else if (typeof root.draft_ids === "number") root.draft_ids += 1;
+      writeFileSync(rootFile, JSON.stringify(root));
+    }
+  }
+  return { created: true, project: name };
+}

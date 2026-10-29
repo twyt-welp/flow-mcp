@@ -48,6 +48,7 @@ export class RemoteCore implements Core {
   voiceover = (a: unknown) => call("voiceover", a);
   capcut_projects = () => call("capcut_projects", {});
   capcut_build = (a: unknown) => call("capcut_build", a);
+  capcut_short = (a: unknown) => call("capcut_short", a);
   capcut_restore = (a: unknown) => call("capcut_restore", a);
   settings = (a: unknown) => call("settings", a);
 

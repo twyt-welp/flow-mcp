@@ -435,11 +435,23 @@ server.registerTool(
   {
     title: "Build the CapCut timeline",
     description:
-      "Write the whole edit into a CapCut project's files: stills and hero clips on the main track cut to the voiceover's beat times with slow push, pan and pull moves (a hero beat longer than its clip holds its own still first, then hands over to the clip), the voiceover, a cut to white after the cold open, music per chapter (crossfading between tracks), ambience and sound effects matched by name to the SOUND cues. Sounds come from Claude's own library, synthesised in code and free (made on first use), and from the user's sound folder, whose files win when both fit. Never use computer use or open CapCut for an edit: this tool writes the project files. day markers and ledger numbers as text. CapCut must be CLOSED. The project's previous file is backed up first (flow_capcut_restore puts it back), and the build replaces the project's whole timeline. Returns what was placed and every cue that had no matching sound file.",
+      "Write the whole edit into a CapCut project's files: stills and hero clips on the main track cut to the voiceover's beat times with slow push, pan and pull moves (a hero beat longer than its clip holds its own still first, then hands over to the clip), the voiceover, a cut to white after the cold open, music per chapter (crossfading between tracks), ambience and sound effects matched by name to the SOUND cues. Sounds come from Claude's own library, synthesised in code and free (made on first use), and from the user's sound folder, whose files win when both fit. Never use computer use or open CapCut for an edit: this tool writes the project files. day markers and ledger numbers as text, and captions from the voiceover's word times (C3 videos: highlight captions on a 9:16 canvas; C5 long-form: none, the voiceover step wrote voice/subtitles.srt for YouTube). CapCut must be CLOSED. The project's previous file is backed up first (flow_capcut_restore puts it back), and the build replaces the project's whole timeline. Returns what was placed and every cue that had no matching sound file.",
     inputSchema: shapes.capcut_build,
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
   },
   (args) => reply(patient("flow_capcut_build", core.capcut_build(args))),
+);
+
+server.registerTool(
+  "flow_capcut_short",
+  {
+    title: "Build a Short in CapCut",
+    description:
+      "Make one of a C5 video's saved Shorts (picked with the branding) as its own vertical CapCut project: its run of beats from the same voiceover, the stills and hero clips filling a 9:16 frame with slow pans, that stretch's music, ambience and effects, its hook line at the top for the first seconds, and highlight captions (the spoken word lit up). The project '<main project> Short <n>' is made as a copy of the video's main CapCut project the first time (CapCut's drafts list is backed up first); later runs rebuild its timeline. Free. CapCut must be CLOSED. Never use computer use or open CapCut.",
+    inputSchema: shapes.capcut_short,
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+  },
+  (args) => reply(patient("flow_capcut_short", core.capcut_short(args))),
 );
 
 server.registerTool(

@@ -14,8 +14,8 @@ import { BIN, COMPUTER, IS_MAC, IS_WIN, moveToBin } from "./platform.js";
 import { TECHNIQUES, techniqueById } from "./techniques.js";
 import { HOME_DIR } from "./chrome.js";
 import { channelDir, planClips, planSheets, planStills, planThumbnails, sheetPath } from "./c5.js";
-import { buildCapcut, capcutRunning, DRAFTS_ROOT, listCapcutProjects, restoreCapcut } from "./capcut.js";
-import { clipFile, engineOf, listProductions, productionShape, progress, readProduction, stillFile, thumbFile, writeProduction } from "./production.js";
+import { buildCapcut, capcutRunning, DRAFTS_ROOT, duplicateCapcut, listCapcutProjects, restoreCapcut } from "./capcut.js";
+import { clipFile, engineOf, listProductions, productionShape, progress, readProduction, stillFile, thumbFile, writeProduction, type Production } from "./production.js";
 import { recordVoiceover } from "./voiceover.js";
 import { ensureSoundLibrary, SOUND_NAMES } from "./sound.js";
 
@@ -329,6 +329,20 @@ export const shapes = {
     ambience_volume: z.number().min(0).max(1).default(0.25),
     titles: z.boolean().default(true).describe("Day markers on screen at each chapter."),
     ledger: z.boolean().default(true).describe("Ledger numbers and countdowns from the edit notes."),
+    captions: z
+      .enum(["highlight", "line", "off"])
+      .optional()
+      .describe("Captions drawn from the voiceover's word times. Default: 'highlight' for a C3 video (2-3 big words, the spoken one lit up), 'off' for a C5 long-form video (it gets voice/subtitles.srt for YouTube instead)."),
+  },
+  capcut_short: {
+    video: z.string().min(1),
+    short: z.number().int().min(1).describe("Which of the video's saved shorts (its n)."),
+    project: z.string().min(1).optional().describe("CapCut project for the Short. Default '<main project> Short <n>', made as a copy of the video's main CapCut project when it doesn't exist yet."),
+    audio_dir: z.string().optional(),
+    music_volume: z.number().min(0).max(1).default(0.3),
+    sfx_volume: z.number().min(0).max(1).default(0.5),
+    ambience_volume: z.number().min(0).max(1).default(0.25),
+    captions: z.enum(["highlight", "line", "off"]).default("highlight"),
   },
   capcut_restore: {
     project: z.string().min(1),
@@ -392,6 +406,7 @@ export interface Core {
   voiceover(a: Args<"voiceover">): Promise<unknown>;
   capcut_projects(): Promise<unknown>;
   capcut_build(a: Args<"capcut_build">): Promise<unknown>;
+  capcut_short(a: Args<"capcut_short">): Promise<unknown>;
   capcut_restore(a: Args<"capcut_restore">): Promise<unknown>;
   settings(a: Args<"settings">): Promise<unknown>;
 }
@@ -825,16 +840,16 @@ export class LocalCore implements Core {
       const id = voice ?? elevenVoice();
       if (!id) throw new Error("No ElevenLabs voice yet: paste your voice ID in Flow Studio's Voice step (ElevenLabs: Voices -> My Voices -> Copy voice ID).");
       const timing = await recordVoiceover(dir, p, { engine: eng, voice: id });
-      return { file: timing.file, seconds: timing.total, aligned: timing.aligned, chapters: timing.chapters, beats: timing.beats.length, engine: eng, credits: 0 };
+      return { file: timing.file, seconds: timing.total, aligned: timing.aligned, chapters: timing.chapters, beats: timing.beats.length, engine: eng, credits: 0, subtitles: join(dir, "voice", "subtitles.srt"), ...shortCheck(p, timing.total) };
     }
     if (eng === "openvoice") {
       const timing = await recordVoiceover(dir, p, { engine: eng, voice: profile ? `my ${profile.toUpperCase()} voice` : "my voice", profile });
-      return { file: timing.file, seconds: timing.total, aligned: timing.aligned, chapters: timing.chapters, beats: timing.beats.length, engine: eng, credits: 0 };
+      return { file: timing.file, seconds: timing.total, aligned: timing.aligned, chapters: timing.chapters, beats: timing.beats.length, engine: eng, credits: 0, subtitles: join(dir, "voice", "subtitles.srt"), ...shortCheck(p, timing.total) };
     }
     const v = voice ?? p.settings?.voice ?? "Charon";
     const timing = await recordVoiceover(dir, p, { engine: eng, voice: v, style: st });
     writeProduction(dir, video, { settings: { voice: v, style: st } });
-    return { file: timing.file, seconds: timing.total, aligned: timing.aligned, chapters: timing.chapters, beats: timing.beats.length, credits: 0 };
+    return { file: timing.file, seconds: timing.total, aligned: timing.aligned, chapters: timing.chapters, beats: timing.beats.length, credits: 0, subtitles: join(dir, "voice", "subtitles.srt"), ...shortCheck(p, timing.total) };
   }
 
   async capcut_projects() {
@@ -849,10 +864,28 @@ export class LocalCore implements Core {
     const sounds = audio_dir ?? audioDir();
     // Claude's own music, ambience and effects, made in code the first time and kept in the channel folder.
     const made = ensureSoundLibrary(join(channelDir(OUTPUT_ROOT), "sound"));
-    const out = await buildCapcut({ dir, production: p, project: name, audio_dir: sounds, library_dir: made.dir, ...o });
+    const c3 = engineOf(p) === "c3";
+    const out = await buildCapcut({ dir, production: p, project: name, audio_dir: sounds, library_dir: made.dir, ...o, captions: o.captions ?? (c3 ? "highlight" : "off"), vertical: c3 });
     writeProduction(dir, video, { settings: { capcut_project: name } });
     if (audio_dir) writeFileSync(SETTINGS_FILE, JSON.stringify({ ...readSettings(), audio_dir }, null, 2));
     return out;
+  }
+
+  // A C5 Short: its run of beats, from the same voiceover, stills and clips, on a 9:16 canvas with highlight captions,
+  // in its own CapCut project copied from the video's main one.
+  async capcut_short({ video, short, project, audio_dir, ...o }: Args<"capcut_short">) {
+    const dir = projectDir(video);
+    const p = readProduction(dir, video);
+    const s = (p.shorts ?? []).find((x) => x.n === short);
+    if (!s) throw new Error(`This video has no Short ${short} saved yet. The writing pass picks them with the branding.`);
+    const main = p.settings?.capcut_project;
+    const name = project ?? (main ? `${main} Short ${short}` : undefined);
+    if (!name) throw new Error("Build the main CapCut edit first (flow_capcut_build): each Short is made as a copy of that project.");
+    const made = main && !project ? await duplicateCapcut(main, name) : { created: false, project: name };
+    const sounds = audio_dir ?? audioDir();
+    const lib = ensureSoundLibrary(join(channelDir(OUTPUT_ROOT), "sound"));
+    const out = await buildCapcut({ dir, production: p, project: name, audio_dir: sounds, library_dir: lib.dir, ...o, titles: true, ledger: true, window: { from: s.from, to: s.to, hook: s.hook }, vertical: true });
+    return { ...out, short: s.n, title: s.title, hashtags: s.hashtags ?? [], project_created: made.created };
   }
 
   async capcut_restore({ project, backup }: Args<"capcut_restore">) {
@@ -875,4 +908,10 @@ export class LocalCore implements Core {
   async techniques({ category }: Args<"techniques">) {
     return TECHNIQUES.filter((t) => !category || t.category === category);
   }
+}
+
+// C3 videos are Shorts kept just under a minute (the user's rule, 2026-10-29): a longer voiceover is flagged before the edit.
+function shortCheck(p: Production, seconds: number) {
+  if (engineOf(p) !== "c3" || seconds <= 58) return {};
+  return { over_short_limit: `The voiceover runs ${seconds.toFixed(1)} s, over the 58 s a C3 Short allows. Shorten the script in the writing pass ("shorten the C3 script"), then record again.` };
 }

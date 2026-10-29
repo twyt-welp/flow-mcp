@@ -1,6 +1,6 @@
 ---
 name: c3-flow-run
-description: Send a C3 Stickman Explainer video's saved prompts to Google Flow and finish it - character sheets, stills, a few paid hero clips under a credit cap, the voiceover in the user's own C3 cloned voice, the CapCut timeline written into the project files, and thumbnails. Built for a cheaper model; it never writes prompts. Use when the user says "run C3 in Flow", "send my C3 prompts to Flow", "draw the C3 stills", "make the C3 clips", "redo C3 still N", "record the C3 voiceover", or asks to edit or build a CapCut project for a C3 video.
+description: Send a C3 Stickman Explainer Short's saved prompts to Google Flow and finish it - character sheets, stills, a few paid hero clips under a credit cap, the voiceover in the user's own C3 cloned voice, the 9:16 CapCut timeline with highlight captions written into the project files, and thumbnails. Built for a cheaper model; it never writes prompts. Use when the user says "run C3 in Flow", "send my C3 prompts to Flow", "draw the C3 stills", "make the C3 clips", "redo C3 still N", "record the C3 voiceover", or asks to edit or build a CapCut project for a C3 video.
 ---
 
 # C3 in Flow: send the saved prompts
@@ -30,7 +30,7 @@ Each queues jobs: `flow_wait` until they finish (it answers within a minute; cal
 2. **Stills (free).** `flow_c5_stills` with `video` and one part's beat numbers at a time (beats share a `chapter`:
    OPENING, MIDDLE, ENDING). After each part show the paths and ask "Next part, or redo any?" A redo: `flow_c5_stills`
    with `beats`, `redo: true`, `mode: "one_by_one"`.
-3. **Hero clips (PAID).** Count the hero beats with a `clip_prompt` (two to four). The cap per clip is
+3. **Hero clips (PAID).** Count the hero beats with a `clip_prompt` (two or three). The cap per clip is
    `settings.max_credits` (default 12). C3 has a budget of 50 credits per video (the user's choice): the clips already
    in `files.clips` plus the clips to make, times the cap, must stay within 50. If they would not, make only the first
    ones that fit and say which were left as stills. A redo of a paid clip counts against the 50 too: ask before one
@@ -44,16 +44,18 @@ Each queues jobs: `flow_wait` until they finish (it answers within a minute; cal
    itself from the record). If it is not ready, say what `openvoice_c3.missing` names and stop: never fall back to the
    C5 voice or another engine unless the user asks. ElevenLabs only when the user asks for it ("use ElevenLabs"): if
    `elevenlabs_ready` and `elevenlabs_voice` are set, `flow_voiceover` with `engine: "elevenlabs"`; otherwise ask them
-   to paste the key and voice ID in Flow Studio's Voice step, never in chat. Report the runtime against the target
-   (about 36, 54 or 72 seconds for 6, 9 or 12 beats).
+   to paste the key and voice ID in Flow Studio's Voice step, never in chat. Report the runtime against the target (about 36 or 54 seconds for 6 or 9 beats). A C3 video is a
+   Short and must stay under a minute: if the result has `over_short_limit`, say so and send the user to the writing
+   pass ("shorten the C3 script") before the CapCut step.
 5. **CapCut (free).** If the user already asked for the edit in their own words, that request is this step: go straight
    to the build with that project name. Otherwise tell them: 1. open CapCut and make a new project named after the
    video, 2. import the `stills` and `clips` folders and `voice/narration.wav` (optional), 3. close CapCut completely,
    then ask for the project name. `flow_capcut_projects` to confirm the name (loosely) and that CapCut is closed, then
    `flow_capcut_build`. Never use computer use and never open CapCut. The build cuts every still to its line of the
    voiceover with its move, hands each hero beat over to its clip, lays music, ambience and effects from Claude's own
-   sound library, and puts the headline over the opening for 2.5 seconds. Report what was placed, any `sfx_skipped`
-   cues and warnings in a few lines, then "Open CapCut, check the edit and export it." `flow_capcut_restore` brings the
+   sound library, puts the headline at the top over the opening for 2.5 seconds, and adds highlight captions (2-3 words at a time, the
+   spoken word lit up yellow) from the voiceover's word times, all on a 9:16 canvas. Report what was placed, any `sfx_skipped`
+   cues and warnings in a few lines, then "Open CapCut, check the edit and export it at 1080x1920." `flow_capcut_restore` brings the
    old timeline back if asked.
 6. **Thumbnails (free).** `flow_c5_thumbnails` with `video`. Show the paths and the saved `overlay_text`.
 
